@@ -12,7 +12,7 @@ This is the npm library for City Hall Enterprise Settings Server
  settings, in an application.  As such, there is really only command 
  to be familiar with:
 
- ```
+ ```javascript
  var value = settings.getVal('/test/val1');
  ```
 
