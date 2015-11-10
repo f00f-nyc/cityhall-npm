@@ -4,7 +4,9 @@ This is the npm library for City Hall Enterprise Settings Server
 
  This project can be installed using:
 
->   npm install cityhall
+```
+npm install cityhall
+````
 
 # USAGE
 
