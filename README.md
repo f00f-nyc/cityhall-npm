@@ -16,6 +16,21 @@ npm install cityhall
  to be familiar with:
 
  ```javascript
- var value = settings.getVal('/test/val1');
+ // synchronous, blocking calling
+ var settings = require('cityhall')('http://path.to.server/api');
+ var value = settings.getValSync('/test/val1');
+ console.log(value);
  ```
+
+ Or:
+
+ ```javascript
+ // asynchronous operation
+ startUp = function (data) {
+    console.log(data.value);
+ };
+
+ var settings = require('cityhall')('http://path.to.server/api');
+ settings.getVal({value: '/test/val1'}, null, startUp);
+```
 
