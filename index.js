@@ -20,11 +20,6 @@ exports.settings = function(url, name, password) {
     };
 
     return {
-        getValueSync: function(path, environment, override) {
-            // ensure logged in
-            // synchronous call to get value
-        },
-
         getValue: function(values, error, callback) {
             // ensure logged in
             // go through each

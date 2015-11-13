@@ -16,21 +16,22 @@ npm install cityhall
  to be familiar with:
 
  ```javascript
- // synchronous, blocking calling
- var settings = require('cityhall')('http://path.to.server/api');
- var value = settings.getValSync('/test/val1');
- console.log(value);
- ```
-
- Or:
-
- ```javascript
- // asynchronous operation
  startUp = function (data) {
     console.log(data.value);
  };
 
  var settings = require('cityhall')('http://path.to.server/api');
  settings.getVal({value: '/test/val1'}, null, startUp);
+```
+
+You can also get multiple values, and in multiple ways, at once using:
+```javascript
+settings.getVal(
+    {
+        value1: '/test/val1',
+        value2: {path: '/test/val2', environment: 'dev'},
+        value3: {path: '/test/val3', override: 'cityhall'}
+    },
+    null, startUp);
 ```
 
