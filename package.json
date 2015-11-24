@@ -4,7 +4,7 @@
   "description": "npm library for accessing City Hall Enterprise Settings Server",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test"
   },
   "repository": {
     "type": "git",
@@ -23,5 +23,11 @@
   "bugs": {
     "url": "https://github.com/f00f-nyc/cityhall-npm/issues"
   },
-  "homepage": "https://github.com/f00f-nyc/cityhall-npm#readme"
+  "homepage": "https://github.com/f00f-nyc/cityhall-npm#readme",
+  "dependencies": {
+    "md5": "^2.0.0",
+    "nock": "^3.2.0",
+    "request": "^2.67.0",
+    "tape": "^4.2.2"
+  }
 }
