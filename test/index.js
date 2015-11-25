@@ -1,2 +1,3 @@
 // manually include all the tests here
-require('./auth_test.js');
+require('./login_test.js');
+require('./default_envs_test.js');

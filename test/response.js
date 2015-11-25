@@ -1,10 +1,12 @@
 var nock = require('nock');
 var ok = {Response:'Ok'};
+var not_ok = {Response:'Failure', Message:'Error from server'};
 var url_for_nock = 'http://not.a.real.url/api';
 var url = url_for_nock + '/';
 
 exports.url = url;
 exports.ok = ok;
+exports.not_ok = not_ok;
 
 exports.value = function (val) {
     var ret = ok;
@@ -12,7 +14,7 @@ exports.value = function (val) {
     return ret;
 };
 
-exports.post = function (address, value, expected) {
+exports.post = function (address, reply, expected) {
     address =  '/'+address;
     if (expected) {
         nock(url_for_nock)
@@ -27,18 +29,28 @@ exports.post = function (address, value, expected) {
 
                 return json == expectedJson;
             })
-            .reply(200, value);
+            .reply(200, reply);
     } else {
-        nock(url_for_nock).post(address).reply(200, ok);
+        nock(url_for_nock).post(address).reply(200, reply);
     }
 };
 
-exports.get = function (address, value) {
-    nock(url_for_nock).get('/'+address).reply(200, value);
+exports.get = function (address, reply) {
+    nock(url_for_nock).get('/'+address).reply(200, reply);
+};
+
+exports.delete = function (address) {
+    nock(url_for_nock).delete('/'+address).reply(200, ok);
 };
 
 exports.error = function(err) {
-    console.log(err);
-    var error = JSON.stringify(err);
-    throw new Error('Unexpected error: '+error);
+    if (err == undefined || err == '') {
+        console.log('Default error handler.');
+        throw new Error('Unexpected error');
+    }
+    else {
+        console.log(err);
+        var error = JSON.stringify(err);
+        throw new Error('Unexpected error: '+error);
+    }
 };

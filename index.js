@@ -1,5 +1,6 @@
 var md5 = require('md5');
 var request = require('request');
+var hostname = require('os').hostname();
 
 /**
  * Hash a password for use with City Hall.
@@ -48,19 +49,36 @@ var getReq = function(method, url, data) {
     return ret;
 };
 
+/**
+ * Wraps an Http call and calls success/failure accordingly.  This
+ * method will a successful call to City Hall that results in an error
+ * (e.x. do not have write permissions) as an error and call failure with it
+ *
+ * @param req - request object
+ * @param success - callback for success
+ * @param failure - callback in case of failure
+ */
 var wrapHttpCall = function(req, success, failure) {
-    request(req, function(error, response, body) {
-        if (error || response.statusCode != 200) {
-            safeCall(failure, body);
-        }
+    req.json = true;
 
-        var data = JSON.parse(body);
-        if (data['Response'] == 'Ok') {
-            safeCall(success, data);
-        } else {
-            safeCall(failure, data['Message']);
+    request(
+        req,
+        function(error, response, body) {
+            if (error || response.statusCode != 200) {
+                if (body) {
+                    safeCall(failure, body);
+                } else {
+                    safeCall(failure, error);
+                }
+            }
+
+            if (body['Response'] == 'Ok') {
+                safeCall(success, body);
+            } else {
+                safeCall(failure, body['Message']);
+            }
         }
-    });
+    );
 };
 
 module.exports = function(url, name, password) {
@@ -70,11 +88,16 @@ module.exports = function(url, name, password) {
     }
 
     if (name == undefined) {
-        //get the machine name
+        name = hostname;
+    }
+
+    if (password == undefined) {
+        password = '';
     }
 
     /**
      * This is the current logged in user, if you are logged in.
+     * Will be set by login()
      */
     var user_name = '';
 
@@ -84,7 +107,6 @@ module.exports = function(url, name, password) {
      * The user should not, in regular usage, interact with this value.
      */
     var default_environment = '';
-
 
     /**
      * Wrapper call for POST'ing to City Hall.
@@ -99,6 +121,13 @@ module.exports = function(url, name, password) {
         wrapHttpCall(req, success, failure);
     };
 
+    /**
+     * Wrapper call for GET'ing from City Hall
+     *
+     * @param location - the location to GET
+     * @param failure - callback in case of failure
+     * @param success - callback for success
+     */
     var wrapGet = function(location, failure, success) {
         var req = getReq('GET', url + location);
         wrapHttpCall(req, success, failure);
@@ -111,13 +140,20 @@ module.exports = function(url, name, password) {
         // otherwise: callback(values)
     };
 
-    return {
+    var setDefaultEnvironment = function(env, error, callback) {
+        wrapPost('auth/user/'+user_name+'/default/', {env: env}, error,
+            function() {
+                default_environment = env;
+                safeCall(callback);
+            }
+        );
+    };
 
+    return {
         getValue: function(values, error, callback) {
             // ensure logged in
             // go through each
         },
-
 
         /**
          * This function logs into City Hall.  It is not required to be called,
@@ -138,12 +174,41 @@ module.exports = function(url, name, password) {
             });
         },
 
+        /**
+         * This function logs out of City Hall.  In order to use any of the
+         * other functions, you must call login() again.
+         */
+        logout: function(err, callback) {
+            if (this.isLoggedIn()) {
+                wrapHttpCall(
+                    getReq('DELETE', url + 'auth/'),
+                    function () {
+                        user_name = '';
+                        callback();
+                    },
+                    err
+                );
+            }
+        },
+
         isLoggedIn: function() {
             return user_name != '';
         },
 
         userName: function() {
             return user_name;
+        },
+
+        defaultEnvironment: function() {
+            return default_environment;
+        },
+
+        setDefaultEnvironment: function(env, err, callback) {
+            if (!this.isLoggedIn()) {
+                this.login(err, function() { setDefaultEnvironment(env, err, callback) });
+                return;
+            }
+            setDefaultEnvironment(env, err, callback);
         },
 
         /**
