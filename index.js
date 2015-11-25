@@ -108,13 +108,13 @@ module.exports = function(url, name, password) {
      */
     var default_environment = '';
 
+    request.jar = true;
+
     /**
      * Wrapper call for POST'ing to City Hall.
      *
      * @param location - the location to POST to (e.x. 'auth/')
      * @param data - the data to send (e.x. {'value': 'xyz'})
-     * @param failure - callback in case of failure
-     * @param success - callback for success
      */
     var wrapPost = function(location, data, failure, success) {
         var req = getReq('POST', url + location, data);
@@ -125,14 +125,17 @@ module.exports = function(url, name, password) {
      * Wrapper call for GET'ing from City Hall
      *
      * @param location - the location to GET
-     * @param failure - callback in case of failure
-     * @param success - callback for success
      */
     var wrapGet = function(location, failure, success) {
         var req = getReq('GET', url + location);
         wrapHttpCall(req, success, failure);
     };
 
+    /********************************
+     * this section is a set of wrappers for the functions that the user
+     * will actually call.  It is done this way so that the actual functions
+     * can easily wrap them with a call to login if we're logged out.
+     */
     var getNextValue = function (value, values, requests, error, callback) {
         // check value.path, value.environment, value.override
         // on return, add value.name=response to values
@@ -149,6 +152,9 @@ module.exports = function(url, name, password) {
         );
     };
 
+    /********************************
+     * The actual object that will be returned to the user.
+     */
     return {
         getValue: function(values, error, callback) {
             // ensure logged in
@@ -167,7 +173,7 @@ module.exports = function(url, name, password) {
 
             wrapPost('auth/', payload, err, function() {
                 wrapGet('auth/user/' + name + '/default/', err, function (data) {
-                    default_environment = data.value;
+                    default_environment = data.value || '';
                     user_name = name;
                     safeCall(callback);
                 })
@@ -191,22 +197,35 @@ module.exports = function(url, name, password) {
             }
         },
 
+        /**
+         * @returns {boolean} - true if logged in
+         */
         isLoggedIn: function() {
             return user_name != '';
         },
 
+        /**
+         * @returns {string} - current logged in user. '' if not logged in.
+         */
         userName: function() {
             return user_name;
         },
 
+        /**
+         * @returns {string} - the default environment.  If not set, returns ''
+         */
         defaultEnvironment: function() {
             return default_environment;
         },
 
+        /**
+         * Sets the default environment
+         * @param env {string} - environment to set to default, can be the same as
+         *      this.defaultEnvironment()
+         */
         setDefaultEnvironment: function(env, err, callback) {
             if (!this.isLoggedIn()) {
-                this.login(err, function() { setDefaultEnvironment(env, err, callback) });
-                return;
+                return this.login(err, function() { setDefaultEnvironment(env, err, callback) });
             }
             setDefaultEnvironment(env, err, callback);
         },

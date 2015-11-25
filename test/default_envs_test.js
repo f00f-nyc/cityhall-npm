@@ -7,7 +7,7 @@ test('logout works', function(assert) {
        response.delete('auth/');
 
        settings.logout(response.error, function() {
-           assert.notok(settings.isLoggedIn(), "user shouldn't be logged in, anymore");
+           assert.notok(settings.isLoggedIn(), "user shouldn't be logged in anymore");
            assert.end();
        });
    });
@@ -52,4 +52,15 @@ test('error from server is handled', function(assert) {
            response.error
        );
    });
+});
+
+test('no default environment fails gracefully', function(assert) {
+    response.post('auth/', response.ok);
+    response.get('auth/user/'+helpers.hostname+'/default/', response.value(null));
+
+    var settings = require('../index.js')(response.url);
+    settings.login(response.error, function() {
+        assert.equals('', settings.defaultEnvironment());
+        assert.end();
+    });
 });
