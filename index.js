@@ -44,7 +44,7 @@ var getReq = function(method, url, data) {
             'content-type': 'application/json',
             body: JSON.stringify(data)
         }]
-    };
+    }
 
     return ret;
 };
@@ -82,7 +82,6 @@ var wrapHttpCall = function(req, failure, success) {
 };
 
 module.exports = function(url, name, password) {
-
     if (url == undefined) {
         throw new Error("Expected a URL to reach City Hall");
     }
@@ -104,7 +103,6 @@ module.exports = function(url, name, password) {
     /**
      * This is the default environment for this session.
      * The calls to getVal() and getValOverride() will use this value.
-     * The user should not, in regular usage, interact with this value.
      */
     var default_environment = '';
 
@@ -160,6 +158,26 @@ module.exports = function(url, name, password) {
 
     var createEnvironment = function(env, error, callback) {
         wrapPost('auth/env/' + env + '/', null, error, callback);
+    };
+
+    var getUser = function(user, error, callback) {
+        wrapGet('auth/user/'+user+'/', null, error, function(data) {
+            safeCall(callback, data.Environments);
+        });
+    };
+
+    var createUser = function(user, password, error, callback) {
+        wrapPost('auth/user/'+user+'/', {passhash: hash(password)}, error, callback);
+    };
+
+    var updatePassword = function(password, error, callback) {
+        var req = getReq('PUT', url+'auth/user/'+user_name+'/', {passhash: hash(password)});
+        wrapHttpCall(req, error, callback);
+    };
+
+    var deleteUser = function(user, error, callback) {
+        var req = getReq('DELETE', url+'auth/user/'+user+'/');
+        wrapHttpCall(req, error, callback);
     };
 
     /********************************
@@ -244,7 +262,7 @@ module.exports = function(url, name, password) {
 
         /**
          * Views all the users for an environment
-         * @param env - the environment to query users for
+         * @param env {string} - the environment to query users for
          */
         viewUsers: function(env, err, callback) {
             if (!this.isLoggedIn()) {
@@ -256,13 +274,64 @@ module.exports = function(url, name, password) {
         /**
          * Creates an empty enviornment. By default, the logged in user will
          * have Grant permissions to it.
-         * @param env - the environment to create, must be unique/unused.
+         * @param env {string} - the environment to create, must be unique/unused.
          */
         createEnvironment: function(env, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function() { createEnvironment(env, err, callback) });
+                return this.login(err, function() { createEnvironment(env, err, callback); });
             }
             createEnvironment(env, err, callback);
+        },
+
+        /**
+         * Returns the information about a user: the environments he has
+         * access to, and the level of permissions for each
+         * @param user {string} - the user to query, it must exist.
+         */
+        getUser: function(user, err, callback) {
+            if (!this.isLoggedIn()) {
+                return this.login(err, function() { getUser(user, err, callback); });
+            }
+            getUser(user, err, callback);
+        },
+
+        /**
+         * Creates a user with the given password.
+         * @param user {string} - the name of the user, must be unique/unused.
+         * @param password {string} - the plaintext password, it will be hashed
+         *   before being sent across the wire.
+         */
+        createUser: function(user, password, err, callback) {
+            if (!this.isLoggedIn()) {
+                return this.login(err, function() { createUser(user, password, err, callback); });
+            }
+            createUser(user, password, err, callback);
+        },
+
+        /**
+         * Updates the password of the current logged in user.
+         * @param password {string} - the plaintext password, it will be hashed
+         *   before being sent across the wire.
+         */
+        updatePassword: function(password, err, callback) {
+            if (!this.isLoggedIn()) {
+                return this.login(err, function() { updatePassword(password, err, callback); });
+            }
+            updatePassword(password, err, callback);
+        },
+
+        /**
+         * Deletes a user. Deletion can only happen if a user's environments
+         * have Grant permissions for the current user, or the user has Write
+         * permissions to the User environment.  If deletion fails, this will
+         * callback err
+         * @param user {string} - the user to delete
+         */
+        deleteUser: function(user, err, callback) {
+            if (!this.isLoggedIn()) {
+                return this.login(err, function () { deleteUser(user, err, callback); });
+            }
+            deleteUser(user, err, callback);
         },
 
         /**
