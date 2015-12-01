@@ -58,7 +58,7 @@ var getReq = function(method, url, data) {
  * @param success - callback for success
  * @param failure - callback in case of failure
  */
-var wrapHttpCall = function(req, success, failure) {
+var wrapHttpCall = function(req, failure, success) {
     req.json = true;
 
     request(
@@ -118,7 +118,7 @@ module.exports = function(url, name, password) {
      */
     var wrapPost = function(location, data, failure, success) {
         var req = getReq('POST', url + location, data);
-        wrapHttpCall(req, success, failure);
+        wrapHttpCall(req, failure, success);
     };
 
     /**
@@ -126,9 +126,9 @@ module.exports = function(url, name, password) {
      *
      * @param location - the location to GET
      */
-    var wrapGet = function(location, failure, success) {
+    var wrapGet = function(location, params, failure, success) {
         var req = getReq('GET', url + location);
-        wrapHttpCall(req, success, failure);
+        wrapHttpCall(req, failure, success);
     };
 
     /********************************
@@ -152,6 +152,16 @@ module.exports = function(url, name, password) {
         );
     };
 
+    var viewUsers = function(env, error, callback) {
+        wrapGet('auth/env/' + env +'/', null, error, function(data) {
+            safeCall(callback, data.Users);
+        });
+    };
+
+    var createEnvironment = function(env, error, callback) {
+        wrapPost('auth/env/' + env + '/', null, error, callback);
+    };
+
     /********************************
      * The actual object that will be returned to the user.
      */
@@ -172,11 +182,13 @@ module.exports = function(url, name, password) {
             var payload = {'username': name, 'passhash': hash(password)};
 
             wrapPost('auth/', payload, err, function() {
-                wrapGet('auth/user/' + name + '/default/', err, function (data) {
-                    default_environment = data.value || '';
-                    user_name = name;
-                    safeCall(callback);
-                })
+                wrapGet('auth/user/' + name + '/default/', null,  err,
+                    function (data) {
+                        default_environment = data.value || '';
+                        user_name = name;
+                        safeCall(callback);
+                    }
+                );
             });
         },
 
@@ -188,11 +200,11 @@ module.exports = function(url, name, password) {
             if (this.isLoggedIn()) {
                 wrapHttpCall(
                     getReq('DELETE', url + 'auth/'),
+                    err,
                     function () {
                         user_name = '';
-                        callback();
-                    },
-                    err
+                        safeCall(callback);
+                    }
                 );
             }
         },
@@ -228,6 +240,29 @@ module.exports = function(url, name, password) {
                 return this.login(err, function() { setDefaultEnvironment(env, err, callback) });
             }
             setDefaultEnvironment(env, err, callback);
+        },
+
+        /**
+         * Views all the users for an environment
+         * @param env - the environment to query users for
+         */
+        viewUsers: function(env, err, callback) {
+            if (!this.isLoggedIn()) {
+                return this.login(err, function() { viewUsers(env, err, callback) });
+            }
+            viewUsers(env, err, callback);
+        },
+
+        /**
+         * Creates an empty enviornment. By default, the logged in user will
+         * have Grant permissions to it.
+         * @param env - the environment to create, must be unique/unused.
+         */
+        createEnvironment: function(env, err, callback) {
+            if (!this.isLoggedIn()) {
+                return this.login(err, function() { createEnvironment(env, err, callback) });
+            }
+            createEnvironment(env, err, callback);
         },
 
         /**

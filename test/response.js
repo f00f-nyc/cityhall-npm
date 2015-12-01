@@ -7,6 +7,10 @@ var url = url_for_nock + '/';
 exports.url = url;
 exports.ok = ok;
 exports.not_ok = not_ok;
+exports.dev_environment = {
+    Response: 'Ok',
+    Users: { "test_user": 4,  "some_user": 1, "cityhall": 4 }
+};
 
 exports.value = function (val) {
     var ret = ok;

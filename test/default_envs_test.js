@@ -24,20 +24,21 @@ test('logout twice is no-op', function(assert) {
     });
 });
 
-test('not logged in will log in', function(assert) {
-    response.post('auth/', response.ok);
-    response.get('auth/user/'+helpers.hostname+'/default/', response.value('dev'));
-    response.post('auth/user/'+helpers.hostname+'/default/', response.ok, {env: 'qa'});
+test('user should be able to set default environment', function(assert) {
+    var test_set_default_environment = function (settings, callback) {
+        response.post('auth/user/'+helpers.hostname+'/default/', response.ok, {env: 'qa'});
 
-    var settings = require('../index.js')(response.url);
-    settings.setDefaultEnvironment(
-        'qa', response.error,
-        function () {
-            assert.ok(settings.isLoggedIn(), 'should be automatically logged in');
-            assert.equals('qa', settings.defaultEnvironment());
-            assert.end();
-        }
-    );
+        settings.setDefaultEnvironment('qa', response.error,
+            function () {
+                assert.ok(settings.isLoggedIn(), 'user should be logged in');
+                assert.equals('qa', settings.defaultEnvironment());
+                callback();
+            }
+        );
+    };
+
+    helpers.newSettings(test_set_default_environment);
+    helpers.autoLogsIn(assert, test_set_default_environment);
 });
 
 test('error from server is handled', function(assert) {
