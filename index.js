@@ -81,6 +81,14 @@ var wrapHttpCall = function(req, failure, success) {
     );
 };
 
+var Rights = {
+    None: 0,
+    Read: 1,
+    ReadProtected: 2,
+    Write: 3,
+    Grant: 4
+};
+
 module.exports = function(url, name, password) {
     if (url == undefined) {
         throw new Error("Expected a URL to reach City Hall");
@@ -180,10 +188,20 @@ module.exports = function(url, name, password) {
         wrapHttpCall(req, error, callback);
     };
 
+    var grant = function(user, env, rights, error, callback) {
+        var req = getReq('POST', url+'auth/grant/', {env: env, user: user, rights: rights});
+        wrapHttpCall(req, error, callback);
+    };
+
     /********************************
      * The actual object that will be returned to the user.
      */
     return {
+        /**
+         * This is a pseudo enum to be used for setting/getting rights
+         */
+        Rights: Rights,
+
         getValue: function(values, error, callback) {
             // ensure logged in
             // go through each
@@ -332,6 +350,28 @@ module.exports = function(url, name, password) {
                 return this.login(err, function () { deleteUser(user, err, callback); });
             }
             deleteUser(user, err, callback);
+        },
+
+        /**
+         * Will give a user rights to a particular environment.  The logged in
+         * user must have Grant permission on that environment.
+         * @param user {string} -
+         * @param env {string} -
+         * @param rights {string} -
+         */
+        grant: function (user, env, rights, err, callback) {
+            if (rights == undefined) {
+                return err('rights are undefined');
+            } else if (rights < Rights.None || rights > Rights.Grant) {
+                return err('rights out of range: ' + rights);
+            } else if (user == undefined) {
+                return err('user is undefined');
+            } else if (env == undefined) {
+                return err('environment is undefined');
+            } else if (!this.isLoggedIn()) {
+                return this.login(err, function () { grant(user, env, rights, err, callback); });
+            }
+            grant(user, env, rights, err, callback);
         },
 
         /**
