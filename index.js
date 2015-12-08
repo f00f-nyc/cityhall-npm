@@ -81,6 +81,17 @@ var wrapHttpCall = function(req, failure, success) {
     );
 };
 
+var sanitizePath = function (path) {
+    var ret = path;
+    if (path[0] != '/') {
+        ret = '/'+path;
+    }
+    if (ret[ret.length-1] != '/') {
+        ret = ret+'/';
+    }
+    return ret;
+};
+
 var Rights = {
     None: 0,
     Read: 1,
@@ -131,9 +142,13 @@ module.exports = function(url, name, password) {
      * Wrapper call for GET'ing from City Hall
      *
      * @param location - the location to GET
+     * @param params - query params for the call
      */
     var wrapGet = function(location, params, failure, success) {
         var req = getReq('GET', url + location);
+        if (params) {
+            req.qs = params;
+        }
         wrapHttpCall(req, failure, success);
     };
 
@@ -142,13 +157,6 @@ module.exports = function(url, name, password) {
      * will actually call.  It is done this way so that the actual functions
      * can easily wrap them with a call to login if we're logged out.
      */
-    var getNextValue = function (value, values, requests, error, callback) {
-        // check value.path, value.environment, value.override
-        // on return, add value.name=response to values
-        // if requests has any items in it, remove the first one and call getNextValue
-        // otherwise: callback(values)
-    };
-
     var setDefaultEnvironment = function(env, error, callback) {
         wrapPost('auth/user/'+user_name+'/default/', {env: env}, error,
             function() {
@@ -189,8 +197,48 @@ module.exports = function(url, name, password) {
     };
 
     var grant = function(user, env, rights, error, callback) {
-        var req = getReq('POST', url+'auth/grant/', {env: env, user: user, rights: rights});
-        wrapHttpCall(req, error, callback);
+        wrapPost('auth/grant/', {env: env, user: user, rights: rights}, error, callback);
+    };
+
+    var getSingleVal = function (url, error, callback) {
+        var fullpath = 'env/'+default_environment+sanitizePath(url);
+        wrapGet(fullpath, null, error, function (data) { callback(data.value); });
+    };
+
+    var getSingleObj = function (obj, error, callback) {
+        var env = default_environment;
+        var params = null;
+        if (obj.environment != undefined) {
+            env = obj.environment;
+        }
+        if (obj.override != undefined) {
+            params = {override: obj.override};
+        }
+        var fullpath = 'env/'+env+sanitizePath(obj.url);
+        wrapGet(fullpath, params, error, function (data) { callback(data.value); });
+    };
+
+    var getNextValue = function (value, values, requests, error, callback) {
+        // check value.path, value.environment, value.override
+        // on return, add value.name=response to values
+        // if requests has any items in it, remove the first one and call getNextValue
+        // otherwise: callback(values)
+    };
+
+    var validateVal = function (val, error, callback) {
+        if (val == undefined) {
+            return safeCall(error, 'must specify value to get');
+        } else if (typeof val == 'string' || val instanceof String) {
+            getSingleVal(val, error, callback);
+        } else if (val.url == undefined) {
+            for (var item in val) {
+                if (val[item].url == undefined) {
+                    return error('must specify value to get ('+item+')');
+                }
+            }
+        } else {
+            getSingleObj(val, error, callback);
+        }
     };
 
     /********************************
@@ -201,11 +249,6 @@ module.exports = function(url, name, password) {
          * This is a pseudo enum to be used for setting/getting rights
          */
         Rights: Rights,
-
-        getValue: function(values, error, callback) {
-            // ensure logged in
-            // go through each
-        },
 
         /**
          * This function logs into City Hall.  It is not required to be called,
@@ -372,6 +415,24 @@ module.exports = function(url, name, password) {
                 return this.login(err, function () { grant(user, env, rights, err, callback); });
             }
             grant(user, env, rights, err, callback);
+        },
+
+        /**
+         * This function will return one or more values from the server.
+         * @param val - multiple options:
+         *  {string} - a single path to the value on the default environment, the
+         *    appropriate override will be retrieved.
+         *  {object} - an object which must have a url property and optional
+         *    override and environment properties.
+         *  {collection} - an object which can have 1 or more properties, which
+         *    cannot be named url.  Each property must have a url property and
+         *    may contain optional override and environment properties.
+         */
+        getVal: function(val, err, callback) {
+            if (!this.isLoggedIn()) {
+                return this.login(err, function () { validateVal(val, err, callback); });
+            }
+            validateVal(val, err, callback);
         },
 
         /**

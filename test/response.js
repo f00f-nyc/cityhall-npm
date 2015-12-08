@@ -16,9 +16,10 @@ exports.test_user = {
     Environments: {dev: 4, auto: 1, users: 1}
 };
 
-exports.value = function (val) {
+exports.value = function (val, protect) {
     var ret = ok;
     ret.value = val;
+    ret.protect = protect == true;
     return ret;
 };
 
