@@ -214,8 +214,15 @@ module.exports = function(url, name, password) {
         if (obj.override != undefined) {
             params = {override: obj.override};
         }
-        var fullpath = 'env/'+env+sanitizePath(obj.url);
-        wrapGet(fullpath, params, error, function (data) { callback(data.value); });
+        var fullpath = 'env/'+env+sanitizePath(obj.path);
+
+        if (obj.raw) {
+            wrapGet(fullpath, params, error, callback);
+        } else {
+            wrapGet(fullpath, params, error, function (data) {
+                callback(data.value);
+            });
+        }
     };
 
     var getNextValue = function (value, values, requests, error, callback) {
@@ -230,9 +237,9 @@ module.exports = function(url, name, password) {
             return safeCall(error, 'must specify value to get');
         } else if (typeof val == 'string' || val instanceof String) {
             getSingleVal(val, error, callback);
-        } else if (val.url == undefined) {
+        } else if (val.path == undefined) {
             for (var item in val) {
-                if (val[item].url == undefined) {
+                if (val[item].path == undefined) {
                     return error('must specify value to get ('+item+')');
                 }
             }
