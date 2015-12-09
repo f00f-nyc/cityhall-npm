@@ -78,6 +78,44 @@ test('can specify all optional items', function (assert) {
         settings.getVal(obj, response.error, function(data) {
             assert.deepEqual(response.value('500'), data);
             assert.end();
-        })
+        });
+    });
+});
+
+test('can specify value-object pair', function (assert) {
+    helpers.newSettings(function (settings) {
+        response.get('env/dev/app1/', response.value('101'));
+        var obj = {value: {path: 'app1'}};
+
+        settings.getVal(obj, response.error, function(data) {
+            assert.ok(data.hasOwnProperty('value'), 'the object coming back should have a value which matches the object passed in');
+            assert.equals('101', data.value);
+            assert.end();
+        });
+    });
+});
+
+test('can specify multiple value-object pairs', function(assert) {
+    helpers.newSettings(function (settings) {
+        response.get('env/dev/app1/', response.value('dev/app1'));
+        response.get('env/qa/app2/', response.value('qa/app2'));
+        response.get('env/uat/app3/?override=user2', response.value('uat/app3'));
+
+        var obj = {
+            value1: {path: 'app1'},
+            value2: {path: 'app2', environment: 'qa'},
+            value3: {path: 'app3', environment: 'uat', override: 'user2'}
+        };
+
+        settings.getVal(obj, response.error, function(data) {
+            assert.ok(data.hasOwnProperty('value1'), 'the object coming back should have a value which matches the object passed in');
+            assert.ok(data.hasOwnProperty('value2'), 'the object coming back should have a value which matches the object passed in');
+            assert.ok(data.hasOwnProperty('value3'), 'the object coming back should have a value which matches the object passed in');
+
+            assert.equals('dev/app1', data.value1);
+            assert.equals('qa/app2', data.value2);
+            assert.equals('uat/app3', data.value3);
+            assert.end();
+        });
     });
 });

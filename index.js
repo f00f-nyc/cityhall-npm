@@ -92,6 +92,16 @@ var sanitizePath = function (path) {
     return ret;
 };
 
+var getFirstProperty = function (obj) {
+    for (var prop in obj) {
+        if (obj.hasOwnProperty(prop)) {
+            return prop;
+        }
+    }
+
+    return undefined;
+};
+
 var Rights = {
     None: 0,
     Read: 1,
@@ -225,15 +235,22 @@ module.exports = function(url, name, password) {
         }
     };
 
-    var getNextValue = function (value, values, requests, error, callback) {
-        // check value.path, value.environment, value.override
-        // on return, add value.name=response to values
-        // if requests has any items in it, remove the first one and call getNextValue
-        // otherwise: callback(values)
+    var getNextValue = function (values, response, error, callback) {
+        var prop = getFirstProperty(values);
+
+        if (prop) {
+            getSingleObj(values[prop], error, function (data) {
+                response[prop] = data;
+                delete values[prop];
+                getNextValue(values, response, error, callback);
+            });
+        } else {
+            callback(response);
+        }
     };
 
     var validateVal = function (val, error, callback) {
-        if (val == undefined) {
+        if ((val == undefined) || (getFirstProperty(val) == undefined)) {
             return safeCall(error, 'must specify value to get');
         } else if (typeof val == 'string' || val instanceof String) {
             getSingleVal(val, error, callback);
@@ -243,6 +260,7 @@ module.exports = function(url, name, password) {
                     return error('must specify value to get ('+item+')');
                 }
             }
+            getNextValue(val, {}, error, callback);
         } else {
             getSingleObj(val, error, callback);
         }
