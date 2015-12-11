@@ -15,6 +15,53 @@ exports.test_user = {
     Response: 'Ok',
     Environments: {dev: 4, auto: 1, users: 1}
 };
+exports.history = {
+    Response: 'Ok',
+    History: [
+        {
+            "active": false,
+            "override": "",
+            "id": 12,
+            "value": "1000",
+            "datetime": new Date().toLocaleDateString(),
+            "protect": false,
+            "name": "app1",
+            "author": "cityhall"
+        },
+        {
+            "active": true,
+            "override": "",
+            "id": 12,
+            "value": "50",
+            "datetime": new Date().toLocaleDateString(),
+            "protect": false,
+            "name": "app1",
+            "author": "test_dev"
+        }
+    ]
+};
+exports.children = {
+    Response: 'Ok',
+    path: "/app1/",
+    children: [
+        {
+            "override": "",
+            "path": "/app1/val1/",
+            "id": 9,
+            "value": "1000",
+            "protect": false,
+            "name": "val1"
+        },
+        {
+            "override": "test_user",
+            "path": "/app1/val1/",
+            "id": 12,
+            "value": "50",
+            "protect": false,
+            "name": "val1"
+        }
+    ]
+};
 
 exports.value = function (val, protect) {
     var ret = ok;

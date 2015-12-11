@@ -102,6 +102,41 @@ var getFirstProperty = function (obj) {
     return undefined;
 };
 
+var invalidUri = function(env, path, override) {
+    return (env == undefined || env == ''
+        || path == undefined || path == ''
+        || override == undefined);
+};
+
+var validateUri = function(uri, error, callback) {
+    if (uri == undefined) {
+        return error('missing fully qualified path');
+    }
+    if (invalidUri(uri.environment, uri.path, uri.override)) {
+        return error('must specify environment, path, and override')
+    }
+    callback();
+};
+
+var sanitizeSet = function(obj) {
+    if (typeof obj == 'string' || obj instanceof String) {
+        return {value: obj};
+    }
+    if (obj === undefined) {
+        return undefined;
+    }
+    var ret={}, valid=false;
+    if (obj.value != undefined) {
+        ret.value = obj.value;
+        valid=true;
+    }
+    if (obj.protect != undefined) {
+        ret.protect = obj.protect;
+        valid=true;
+    }
+    return valid ? ret : undefined;
+};
+
 var Rights = {
     None: 0,
     Read: 1,
@@ -264,6 +299,77 @@ module.exports = function(url, name, password) {
         } else {
             getSingleObj(val, error, callback);
         }
+    };
+
+    var setSingleObj = function (uri, value, error, callback) {
+        wrapPost('env/'+uri.environment+sanitizePath(uri.path)+'?override='+uri.override,
+            value, error, callback);
+    };
+
+    var setNextValue = function (values, error, callback) {
+        var value = values.pop();
+        if (value == undefined) {
+            return callback();
+        }
+        var sanitizedSet = sanitizeSet(value);
+        setSingleObj(value, sanitizedSet, error, function() {
+            setNextValue(values, error, callback);
+        });
+    };
+
+    var validateSet = function (uri, value, error, callback) {
+        if (value instanceof Array) {
+            for (var i=0; i<value.length; i++) {
+                var val = value[i];
+                if (invalidUri(val.environment, val.path, val.override)) {
+                    return error('must specify environment, path, and override (' + i + ')');
+                }
+                var sanitizedSet = sanitizeSet(val);
+                if (!sanitizedSet) {
+                    return error('must specify value to set (' + i + ')');
+                }
+            }
+            return setNextValue(value, error, callback);
+        }
+
+        validateUri(uri, error, function() {
+            var sanitizedSet = sanitizeSet(value);
+            if (!sanitizedSet) {
+                return error('must specify value to set');
+            }
+            setSingleObj(uri, sanitizedSet, error, callback);
+        });
+    };
+
+    var deleteVal = function(uri, error, callback) {
+        validateUri(uri, error, function() {
+            var req = getReq('DELETE', url+'env/'+uri.environment+sanitizePath(uri.path)+'?override='+uri.override);
+            wrapHttpCall(req, error, callback);
+        });
+    };
+
+    var getHistory = function(uri, error, callback) {
+        validateUri(uri, error, function() {
+            wrapGet(
+                'env/'+uri.environment + sanitizePath(uri.path),
+                {override: uri.override, viewhistory: true},
+                error, function(data) {
+                    callback(data.History);
+                }
+            );
+        });
+    };
+
+    var getChildren = function(env, path, error, callback) {
+        if (invalidUri(env, path, '')) {
+            return error('Must specify environment and path');
+        }
+
+        wrapGet('env/'+env+sanitizePath(path), {viewchildren: true}, error,
+            function (data) {
+                callback({path: data.path, children: data.children});
+            }
+        );
     };
 
     /********************************
@@ -448,16 +554,90 @@ module.exports = function(url, name, password) {
          *  {string} - a single path to the value on the default environment, the
          *    appropriate override will be retrieved.
          *  {object} - an object which must have a url property and optional
-         *    override and environment properties.
+         *    raw, override, and/or environment properties.  The 'raw' property
+         *    is the only way to retrieve the protect bit, as it returns the
+         *    entire response from the server.
          *  {collection} - an object which can have 1 or more properties, which
          *    cannot be named url.  Each property must have a url property and
-         *    may contain optional override and environment properties.
+         *    may contain optional raw, override, and/or environment properties.
          */
         getVal: function(val, err, callback) {
             if (!this.isLoggedIn()) {
                 return this.login(err, function () { validateVal(val, err, callback); });
             }
             validateVal(val, err, callback);
+        },
+
+        /**
+         * This function will set a value.
+         * @param uri {object} - identifier of the value to be set; Must contain:
+         *      environment {string} - the environment to set this on. Must be
+         *          specified, even if the value being set is on defaultEnvironment()
+         *      path {string} - the path on the environment
+         *      override {string} - the override to set. Must be specified,
+         *          even if it is the default ('') one.
+         * @param value - what to set the value to.  If this is a string, it
+         *  will simply set the uri to that.  If it is an object, it must expose
+         *  one or both of:
+         *      value {string} - the value to set it to
+         *      protect {bool} - the protect bit
+         *  If it is an Array, it must be an array of the aforementioned objects,
+         *  containing either a value or protect property or both, as well as an
+         *  environment, path, and override property.  If this value is an Array,
+         *  the uri value will be ignored   .
+         */
+        setVal: function(uri, value, err, callback) {
+            if (!this.isLoggedIn()) {
+                return this.login(err, function () { validateSet(uri, value, err, callback); });
+            }
+            validateSet(uri, value, err, callback);
+        },
+
+        /**
+         * This function will delete a value.
+         * @param uri {object} - identifier of the value to be set; Must contain:
+         *      environment {string} - the environment to set this on. Must be
+         *          specified, even if the value being set is on defaultEnvironment()
+         *      path {string} - the path on the environment
+         *      override {string} - the override to set. Must be specified,
+         *          even if it is the default ('') one.
+         */
+        deleteVal: function(uri, err, callback) {
+            if (!this.isLoggedIn()) {
+                return this.login(err, function () { deleteVal(uri, err, callback); });
+            }
+            deleteVal(uri, err, callback);
+        },
+
+        /**
+         * This function will retrieve the history for a specific value.
+         * @param uri {object} - identifier of the value to be set; Must contain:
+         *      environment {string} - the environment to set this on. Must be
+         *          specified, even if the value being set is on defaultEnvironment()
+         *      path {string} - the path on the environment
+         *      override {string} - the override to set. Must be specified,
+         *          even if it is the default ('') one.
+         */
+        getHistory: function(uri, err, callback) {
+            if (!this.isLoggedIn()) {
+                return this.login(err, function() { getHistory(uri, err, callback); });
+            }
+            getHistory(uri, err, callback);
+        },
+
+        /**
+         * This function will retrieve children given an environment and path.
+         * The object returned will have two properties: path (the path passed
+         * in), and children (an array of all children on that path).
+         *
+         * @param env {string} - the environment to query
+         * @param path {string} - the path on that environment
+         */
+        getChildren: function(env, path, err, callback) {
+            if (!this.isLoggedIn()) {
+                return this.login(err, function() { getChildren(env, path, err, callback); });
+            }
+            getChildren(env, path, err, callback);
         },
 
         /**

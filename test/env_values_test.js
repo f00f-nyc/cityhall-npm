@@ -2,7 +2,7 @@ var test = require('tape');
 var response = require('./response.js');
 var helpers = require('./helpers.js');
 
-test('undefined path yields error', function (assert) {
+test('undefined path yields error for getVal', function (assert) {
     helpers.newSettings(function (settings) {
         settings.getVal(undefined, function (data) {
             assert.equals('must specify value to get', data);
@@ -56,6 +56,14 @@ test('can specify override', function (assert) {
    helpers.newSettings(function (settings) {
        response.get('env/dev/app2/?override=user2', response.value('300'));
        var obj = {override: 'user2', path: 'app2'};
+       settings.getVal(obj, response.error, function () { assert.end(); });
+   });
+});
+
+test('can specify default override', function (assert) {
+   helpers.newSettings(function (settings) {
+       response.get('env/dev/app2/?override=', response.value('301'));
+       var obj = {override: '', path: 'app2'};
        settings.getVal(obj, response.error, function () { assert.end(); });
    });
 });
@@ -118,4 +126,139 @@ test('can specify multiple value-object pairs', function(assert) {
             assert.end();
         });
     });
+});
+
+test('incomplete set yields error', function (assert) {
+    helpers.newSettings(function (settings) {
+        settings.setVal(undefined, '', function (data) {
+            assert.equals('missing fully qualified path', data);
+        }, response.error);
+        settings.setVal({}, '', function (data) {
+            assert.equals('must specify environment, path, and override', data);
+        }, response.error);
+        settings.setVal({path: 'app'}, '', function (data) {
+            assert.equals('must specify environment, path, and override', data);
+        }, response.error);
+        settings.setVal({path: 'app', environment: 'qa'}, '', function (data) {
+            assert.equals('must specify environment, path, and override', data);
+        }, response.error);
+        settings.setVal({override: 'user2', environment: 'qa'}, '', function (data) {
+            assert.equals('must specify environment, path, and override', data);
+        }, response.error);
+        settings.setVal({path: 'app', override: 'user2'}, '', function (data) {
+            assert.equals('must specify environment, path, and override', data);
+        }, response.error);
+        settings.setVal({path: 'app', override: 'user2', environment: 'qa'}, undefined, function (data) {
+            assert.equals('must specify value to set', data);
+        }, response.error);
+
+        var multiple_vals = [
+            {environment: 'qa', path: 'app1', override: 'user2', value: '100'},
+            {environment: 'qa', path: 'app2', override: 'user2'},
+            {environment: 'qa', path: 'app1', override: 'user2', protect: true}
+        ];
+        settings.setVal(undefined, multiple_vals, function (data) {
+            assert.equals('must specify value to set (1)', data);
+        }, response.error);
+
+        multiple_vals = [
+            {environment: 'qa', path: 'app1', override: 'user2', value: '100'},
+            {environment: 'qa', path: 'app2', value: '200'},
+            {environment: 'qa', path: 'app1', override: 'user2', protect: true}
+        ];
+        settings.setVal(undefined, multiple_vals, function (data) {
+            assert.equals('must specify environment, path, and override (1)', data);
+        }, response.error);
+
+        assert.end();
+    });
+});
+
+test('can set value by string', function (assert) {
+    var set_value = function(settings, callback) {
+        response.post('env/qa/app1/?override=user2', response.ok, {value: 'some value'});
+
+        var uri = {path: 'app1', override: 'user2', environment: 'qa'};
+        var object = 'some value';
+        settings.setVal(uri, object, response.error, callback);
+    };
+
+    helpers.newSettings(set_value);
+    helpers.autoLogsIn(assert, set_value);
+});
+
+test('can set value by object', function (assert) {
+    helpers.newSettings(function (settings) {
+        response.post('env/qa/app1/?override=user2', response.ok);
+        var uri = {path: 'app1', override: 'user2', environment: 'qa'};
+        var value = {value: 'some value'};
+        settings.setVal(uri, value, response.error, function () { assert.end(); });
+    });
+});
+
+test('can set multiple values', function (assert) {
+    helpers.newSettings(function(settings) {
+        var multiple_vals = [
+            {environment: 'qa', path: 'app1', override: 'user2', value: '100'},
+            {environment: 'qa', path: 'app2', override: '', value: '200', protect: true},
+            {environment: 'uat', path: 'app1', override: 'user2', protect: true}
+        ];
+        response.post('env/qa/app1/?override=user2', response.ok, {value: '100'});
+        response.post('env/qa/app2/?override=', response.ok, {value: '200', protect: true});
+        response.post('env/uat/app1/?override=user2', response.ok, {protect: true});
+
+        settings.setVal(undefined, multiple_vals, response.error, function() { assert.end(); });
+    });
+});
+
+test('can set protect', function (assert) {
+    helpers.newSettings(function (settings) {
+        response.post('env/qa/app1/?override=user2', response.ok);
+        var uri = {path: 'app1', override: 'user2', environment: 'qa'};
+        var value = {protect: false};
+        settings.setVal(uri, value, response.error, function () { assert.end(); });
+    });
+});
+
+test('can set protect and value simultaneously', function (assert) {
+    helpers.newSettings(function (settings) {
+        response.post('env/qa/app1/?override=user2', response.ok);
+        var uri = {path: 'app1', override: 'user2', environment: 'qa'};
+        var value = {protect: false, value: '200'};
+        settings.setVal(uri, value, response.error, function () { assert.end(); });
+    });
+});
+
+test('incomplete delete yields error', function (assert) {
+    helpers.newSettings(function (settings) {
+        settings.deleteVal(undefined, function (data) {
+            assert.equals('missing fully qualified path', data);
+        }, response.error);
+        settings.deleteVal({}, function (data) {
+            assert.equals('must specify environment, path, and override', data);
+        }, response.error);
+        settings.deleteVal({path: 'app'}, function (data) {
+            assert.equals('must specify environment, path, and override', data);
+        }, response.error);
+        settings.deleteVal({path: 'app', environment: 'qa'}, function (data) {
+            assert.equals('must specify environment, path, and override', data);
+        }, response.error);
+        settings.deleteVal({override: 'user2', environment: 'qa'}, function (data) {
+            assert.equals('must specify environment, path, and override', data);
+        }, response.error);
+        settings.deleteVal({path: 'app', override: 'user2'}, function (data) {
+            assert.equals('must specify environment, path, and override', data);
+        }, response.error);
+        assert.end();
+    });
+});
+
+test('can delete value', function (assert) {
+    var delete_val = function (settings, callback) {
+        response.delete('env/qa/app1/?override=user2');
+        settings.deleteVal({path: 'app1', environment: 'qa', override: 'user2'}, response.error, callback);
+    };
+
+    helpers.newSettings(delete_val);
+    helpers.autoLogsIn(assert, delete_val);
 });
