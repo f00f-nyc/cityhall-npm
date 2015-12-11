@@ -1,142 +1,3 @@
-var md5 = require('md5');
-var request = require('request');
-var hostname = require('os').hostname();
-
-/**
- * Hash a password for use with City Hall.
- *
- * @param password - the plaintext password
- * @returns string - City Hall hash of the given password
- */
-var hash = function(password) {
-    if ((password == undefined) || (password == '')) {
-        return '';
-    }
-    return md5(password);
-};
-
-/**
- * Checks to see if func exists, and if it does, call it using data.
- *
- * @param func - the function to call
- * @param data - the data to pass to the
- */
-var safeCall = function(func, data) {
-    if ((func != undefined) && (func instanceof Function)) {
-        func(data);
-    }
-};
-
-/**
- * Returns a req object to be passed to request()
- *
- * @param method - the method to use 'GET', 'POST'
- * @param url - the url to use
- */
-var getReq = function(method, url, data) {
-    var ret = {
-        method: method,
-        uri: url
-    };
-
-    if (data != undefined) {
-        ret.multipart = [{
-            'content-type': 'application/json',
-            body: JSON.stringify(data)
-        }]
-    }
-
-    return ret;
-};
-
-/**
- * Wraps an Http call and calls success/failure accordingly.  This
- * method will a successful call to City Hall that results in an error
- * (e.x. do not have write permissions) as an error and call failure with it
- *
- * @param req - request object
- * @param success - callback for success
- * @param failure - callback in case of failure
- */
-var wrapHttpCall = function(req, failure, success) {
-    req.json = true;
-
-    request(
-        req,
-        function(error, response, body) {
-            if (error || response.statusCode != 200) {
-                if (body) {
-                    safeCall(failure, body);
-                } else {
-                    safeCall(failure, error);
-                }
-            }
-
-            if (body['Response'] == 'Ok') {
-                safeCall(success, body);
-            } else {
-                safeCall(failure, body['Message']);
-            }
-        }
-    );
-};
-
-var sanitizePath = function (path) {
-    var ret = path;
-    if (path[0] != '/') {
-        ret = '/'+path;
-    }
-    if (ret[ret.length-1] != '/') {
-        ret = ret+'/';
-    }
-    return ret;
-};
-
-var getFirstProperty = function (obj) {
-    for (var prop in obj) {
-        if (obj.hasOwnProperty(prop)) {
-            return prop;
-        }
-    }
-
-    return undefined;
-};
-
-var invalidUri = function(env, path, override) {
-    return (env == undefined || env == ''
-        || path == undefined || path == ''
-        || override == undefined);
-};
-
-var validateUri = function(uri, error, callback) {
-    if (uri == undefined) {
-        return error('missing fully qualified path');
-    }
-    if (invalidUri(uri.environment, uri.path, uri.override)) {
-        return error('must specify environment, path, and override')
-    }
-    callback();
-};
-
-var sanitizeSet = function(obj) {
-    if (typeof obj == 'string' || obj instanceof String) {
-        return {value: obj};
-    }
-    if (obj === undefined) {
-        return undefined;
-    }
-    var ret={}, valid=false;
-    if (obj.value != undefined) {
-        ret.value = obj.value;
-        valid=true;
-    }
-    if (obj.protect != undefined) {
-        ret.protect = obj.protect;
-        valid=true;
-    }
-    return valid ? ret : undefined;
-};
-
 var Rights = {
     None: 0,
     Read: 1,
@@ -146,231 +7,7 @@ var Rights = {
 };
 
 module.exports = function(url, name, password) {
-    if (url == undefined) {
-        throw new Error("Expected a URL to reach City Hall");
-    }
-
-    if (name == undefined) {
-        name = hostname;
-    }
-
-    if (password == undefined) {
-        password = '';
-    }
-
-    /**
-     * This is the current logged in user, if you are logged in.
-     * Will be set by login()
-     */
-    var user_name = '';
-
-    /**
-     * This is the default environment for this session.
-     * The calls to getVal() and getValOverride() will use this value.
-     */
-    var default_environment = '';
-
-    request.jar = true;
-
-    /**
-     * Wrapper call for POST'ing to City Hall.
-     *
-     * @param location - the location to POST to (e.x. 'auth/')
-     * @param data - the data to send (e.x. {'value': 'xyz'})
-     */
-    var wrapPost = function(location, data, failure, success) {
-        var req = getReq('POST', url + location, data);
-        wrapHttpCall(req, failure, success);
-    };
-
-    /**
-     * Wrapper call for GET'ing from City Hall
-     *
-     * @param location - the location to GET
-     * @param params - query params for the call
-     */
-    var wrapGet = function(location, params, failure, success) {
-        var req = getReq('GET', url + location);
-        if (params) {
-            req.qs = params;
-        }
-        wrapHttpCall(req, failure, success);
-    };
-
-    /********************************
-     * this section is a set of wrappers for the functions that the user
-     * will actually call.  It is done this way so that the actual functions
-     * can easily wrap them with a call to login if we're logged out.
-     */
-    var setDefaultEnvironment = function(env, error, callback) {
-        wrapPost('auth/user/'+user_name+'/default/', {env: env}, error,
-            function() {
-                default_environment = env;
-                safeCall(callback);
-            }
-        );
-    };
-
-    var viewUsers = function(env, error, callback) {
-        wrapGet('auth/env/' + env +'/', null, error, function(data) {
-            safeCall(callback, data.Users);
-        });
-    };
-
-    var createEnvironment = function(env, error, callback) {
-        wrapPost('auth/env/' + env + '/', null, error, callback);
-    };
-
-    var getUser = function(user, error, callback) {
-        wrapGet('auth/user/'+user+'/', null, error, function(data) {
-            safeCall(callback, data.Environments);
-        });
-    };
-
-    var createUser = function(user, password, error, callback) {
-        wrapPost('auth/user/'+user+'/', {passhash: hash(password)}, error, callback);
-    };
-
-    var updatePassword = function(password, error, callback) {
-        var req = getReq('PUT', url+'auth/user/'+user_name+'/', {passhash: hash(password)});
-        wrapHttpCall(req, error, callback);
-    };
-
-    var deleteUser = function(user, error, callback) {
-        var req = getReq('DELETE', url+'auth/user/'+user+'/');
-        wrapHttpCall(req, error, callback);
-    };
-
-    var grant = function(user, env, rights, error, callback) {
-        wrapPost('auth/grant/', {env: env, user: user, rights: rights}, error, callback);
-    };
-
-    var getSingleVal = function (url, error, callback) {
-        var fullpath = 'env/'+default_environment+sanitizePath(url);
-        wrapGet(fullpath, null, error, function (data) { callback(data.value); });
-    };
-
-    var getSingleObj = function (obj, error, callback) {
-        var env = default_environment;
-        var params = null;
-        if (obj.environment != undefined) {
-            env = obj.environment;
-        }
-        if (obj.override != undefined) {
-            params = {override: obj.override};
-        }
-        var fullpath = 'env/'+env+sanitizePath(obj.path);
-
-        if (obj.raw) {
-            wrapGet(fullpath, params, error, callback);
-        } else {
-            wrapGet(fullpath, params, error, function (data) {
-                callback(data.value);
-            });
-        }
-    };
-
-    var getNextValue = function (values, response, error, callback) {
-        var prop = getFirstProperty(values);
-
-        if (prop) {
-            getSingleObj(values[prop], error, function (data) {
-                response[prop] = data;
-                delete values[prop];
-                getNextValue(values, response, error, callback);
-            });
-        } else {
-            callback(response);
-        }
-    };
-
-    var validateVal = function (val, error, callback) {
-        if ((val == undefined) || (getFirstProperty(val) == undefined)) {
-            return safeCall(error, 'must specify value to get');
-        } else if (typeof val == 'string' || val instanceof String) {
-            getSingleVal(val, error, callback);
-        } else if (val.path == undefined) {
-            for (var item in val) {
-                if (val[item].path == undefined) {
-                    return error('must specify value to get ('+item+')');
-                }
-            }
-            getNextValue(val, {}, error, callback);
-        } else {
-            getSingleObj(val, error, callback);
-        }
-    };
-
-    var setSingleObj = function (uri, value, error, callback) {
-        wrapPost('env/'+uri.environment+sanitizePath(uri.path)+'?override='+uri.override,
-            value, error, callback);
-    };
-
-    var setNextValue = function (values, error, callback) {
-        var value = values.pop();
-        if (value == undefined) {
-            return callback();
-        }
-        var sanitizedSet = sanitizeSet(value);
-        setSingleObj(value, sanitizedSet, error, function() {
-            setNextValue(values, error, callback);
-        });
-    };
-
-    var validateSet = function (uri, value, error, callback) {
-        if (value instanceof Array) {
-            for (var i=0; i<value.length; i++) {
-                var val = value[i];
-                if (invalidUri(val.environment, val.path, val.override)) {
-                    return error('must specify environment, path, and override (' + i + ')');
-                }
-                var sanitizedSet = sanitizeSet(val);
-                if (!sanitizedSet) {
-                    return error('must specify value to set (' + i + ')');
-                }
-            }
-            return setNextValue(value, error, callback);
-        }
-
-        validateUri(uri, error, function() {
-            var sanitizedSet = sanitizeSet(value);
-            if (!sanitizedSet) {
-                return error('must specify value to set');
-            }
-            setSingleObj(uri, sanitizedSet, error, callback);
-        });
-    };
-
-    var deleteVal = function(uri, error, callback) {
-        validateUri(uri, error, function() {
-            var req = getReq('DELETE', url+'env/'+uri.environment+sanitizePath(uri.path)+'?override='+uri.override);
-            wrapHttpCall(req, error, callback);
-        });
-    };
-
-    var getHistory = function(uri, error, callback) {
-        validateUri(uri, error, function() {
-            wrapGet(
-                'env/'+uri.environment + sanitizePath(uri.path),
-                {override: uri.override, viewhistory: true},
-                error, function(data) {
-                    callback(data.History);
-                }
-            );
-        });
-    };
-
-    var getChildren = function(env, path, error, callback) {
-        if (invalidUri(env, path, '')) {
-            return error('Must specify environment and path');
-        }
-
-        wrapGet('env/'+env+sanitizePath(path), {viewchildren: true}, error,
-            function (data) {
-                callback({path: data.path, children: data.children});
-            }
-        );
-    };
+    var self = require('./lib.js')(url, name, password);
 
     /********************************
      * The actual object that will be returned to the user.
@@ -382,24 +19,20 @@ module.exports = function(url, name, password) {
         Rights: Rights,
 
         /**
+         * @returns {boolean} - true if logged in
+         */
+        isLoggedIn: function() {
+            return self.getName() != '';
+        },
+
+        /**
          * This function logs into City Hall.  It is not required to be called,
          * If it isn't called explicitly, it will be called by the first
          * operation to call City Hall. No-op if already logged in.
          */
         login: function(err, callback) {
             if (this.isLoggedIn()) { return; }
-
-            var payload = {'username': name, 'passhash': hash(password)};
-
-            wrapPost('auth/', payload, err, function() {
-                wrapGet('auth/user/' + name + '/default/', null,  err,
-                    function (data) {
-                        default_environment = data.value || '';
-                        user_name = name;
-                        safeCall(callback);
-                    }
-                );
-            });
+            self.login(err, callback);
         },
 
         /**
@@ -408,36 +41,22 @@ module.exports = function(url, name, password) {
          */
         logout: function(err, callback) {
             if (this.isLoggedIn()) {
-                wrapHttpCall(
-                    getReq('DELETE', url + 'auth/'),
-                    err,
-                    function () {
-                        user_name = '';
-                        safeCall(callback);
-                    }
-                );
+                self.logout(err, callback);
             }
-        },
-
-        /**
-         * @returns {boolean} - true if logged in
-         */
-        isLoggedIn: function() {
-            return user_name != '';
         },
 
         /**
          * @returns {string} - current logged in user. '' if not logged in.
          */
         userName: function() {
-            return user_name;
+            return self.getName();
         },
 
         /**
          * @returns {string} - the default environment.  If not set, returns ''
          */
         defaultEnvironment: function() {
-            return default_environment;
+            return self.defaultEnvironment();
         },
 
         /**
@@ -447,9 +66,9 @@ module.exports = function(url, name, password) {
          */
         setDefaultEnvironment: function(env, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function() { setDefaultEnvironment(env, err, callback) });
+                return this.login(err, function() { self.setDefaultEnvironment(env, err, callback) });
             }
-            setDefaultEnvironment(env, err, callback);
+            self.setDefaultEnvironment(env, err, callback);
         },
 
         /**
@@ -458,9 +77,9 @@ module.exports = function(url, name, password) {
          */
         viewUsers: function(env, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function() { viewUsers(env, err, callback) });
+                return this.login(err, function() { self.viewUsers(env, err, callback) });
             }
-            viewUsers(env, err, callback);
+            self.viewUsers(env, err, callback);
         },
 
         /**
@@ -470,9 +89,9 @@ module.exports = function(url, name, password) {
          */
         createEnvironment: function(env, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function() { createEnvironment(env, err, callback); });
+                return this.login(err, function() { self.createEnvironment(env, err, callback); });
             }
-            createEnvironment(env, err, callback);
+            self.createEnvironment(env, err, callback);
         },
 
         /**
@@ -482,9 +101,9 @@ module.exports = function(url, name, password) {
          */
         getUser: function(user, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function() { getUser(user, err, callback); });
+                return this.login(err, function() { self.getUser(user, err, callback); });
             }
-            getUser(user, err, callback);
+            self.getUser(user, err, callback);
         },
 
         /**
@@ -495,9 +114,9 @@ module.exports = function(url, name, password) {
          */
         createUser: function(user, password, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function() { createUser(user, password, err, callback); });
+                return this.login(err, function() { self.createUser(user, password, err, callback); });
             }
-            createUser(user, password, err, callback);
+            self.createUser(user, password, err, callback);
         },
 
         /**
@@ -507,9 +126,9 @@ module.exports = function(url, name, password) {
          */
         updatePassword: function(password, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function() { updatePassword(password, err, callback); });
+                return this.login(err, function() { self.updatePassword(password, err, callback); });
             }
-            updatePassword(password, err, callback);
+            self.updatePassword(password, err, callback);
         },
 
         /**
@@ -521,9 +140,9 @@ module.exports = function(url, name, password) {
          */
         deleteUser: function(user, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function () { deleteUser(user, err, callback); });
+                return this.login(err, function () { self.deleteUser(user, err, callback); });
             }
-            deleteUser(user, err, callback);
+            self.deleteUser(user, err, callback);
         },
 
         /**
@@ -543,9 +162,9 @@ module.exports = function(url, name, password) {
             } else if (env == undefined) {
                 return err('environment is undefined');
             } else if (!this.isLoggedIn()) {
-                return this.login(err, function () { grant(user, env, rights, err, callback); });
+                return this.login(err, function () { self.grant(user, env, rights, err, callback); });
             }
-            grant(user, env, rights, err, callback);
+            self.grant(user, env, rights, err, callback);
         },
 
         /**
@@ -563,9 +182,9 @@ module.exports = function(url, name, password) {
          */
         getVal: function(val, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function () { validateVal(val, err, callback); });
+                return this.login(err, function () { self.getVal(val, err, callback); });
             }
-            validateVal(val, err, callback);
+            self.getVal(val, err, callback);
         },
 
         /**
@@ -588,9 +207,9 @@ module.exports = function(url, name, password) {
          */
         setVal: function(uri, value, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function () { validateSet(uri, value, err, callback); });
+                return this.login(err, function () { self.setVal(uri, value, err, callback); });
             }
-            validateSet(uri, value, err, callback);
+            self.setVal(uri, value, err, callback);
         },
 
         /**
@@ -604,9 +223,9 @@ module.exports = function(url, name, password) {
          */
         deleteVal: function(uri, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function () { deleteVal(uri, err, callback); });
+                return this.login(err, function () { self.deleteVal(uri, err, callback); });
             }
-            deleteVal(uri, err, callback);
+            self.deleteVal(uri, err, callback);
         },
 
         /**
@@ -620,9 +239,9 @@ module.exports = function(url, name, password) {
          */
         getHistory: function(uri, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function() { getHistory(uri, err, callback); });
+                return this.login(err, function() { self.getHistory(uri, err, callback); });
             }
-            getHistory(uri, err, callback);
+            self.getHistory(uri, err, callback);
         },
 
         /**
@@ -635,15 +254,9 @@ module.exports = function(url, name, password) {
          */
         getChildren: function(env, path, err, callback) {
             if (!this.isLoggedIn()) {
-                return this.login(err, function() { getChildren(env, path, err, callback); });
+                return this.login(err, function() { self.getChildren(env, path, err, callback); });
             }
-            getChildren(env, path, err, callback);
-        },
-
-        /**
-         * This is an internal function, but exposed to the outside world so it
-         * can be easily tested.
-         */
-        hash: hash
+            self.getChildren(env, path, err, callback);
+        }
     };
 };

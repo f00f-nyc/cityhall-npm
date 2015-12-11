@@ -9,15 +9,15 @@ test('Url is required', function(assert) {
 });
 
 test('Hash of empty password is empty', function(assert) {
-    var settings = require('../index.js')(response.url);
-    assert.equals('', settings.hash(''));
-    assert.equals('', settings.hash());
+    var lib = require('../lib.js')(response.url);
+    assert.equals('', lib.hash(''));
+    assert.equals('', lib.hash());
     assert.end();
 });
 
 test('Non empty passwords should be hashed', function (assert) {
-    var settings = require('../index.js')(response.url);
-    assert.notEquals('', settings.hash('some password'));
+    var lib = require('../lib.js')(response.url);
+    assert.notEquals('', lib.hash('some password'));
     assert.end();
 });
 
