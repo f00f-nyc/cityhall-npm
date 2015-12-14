@@ -1,11 +1,12 @@
-var Rights = {
-    None: 0,
-    Read: 1,
-    ReadProtected: 2,
-    Write: 3,
-    Grant: 4
-};
-
+/**
+ * This module is a user-friendly wrapper to lib.js  It maintains state (via
+ * isLoggedIn) and will ensure the user is logged in before attempting any
+ * of the operations.
+ *
+ * @param url - the City Hall URL. It will throw an exception without it.
+ * @param name - the name to use.  If undefined, will use machine name
+ * @param password - the plaintext password.  If undefined, it will use ''
+ */
 module.exports = function(url, name, password) {
     var self = require('./lib.js')(url, name, password);
 
@@ -16,7 +17,13 @@ module.exports = function(url, name, password) {
         /**
          * This is a pseudo enum to be used for setting/getting rights
          */
-        Rights: Rights,
+        Rights: {
+            None: 0,
+            Read: 1,
+            ReadProtected: 2,
+            Write: 3,
+            Grant: 4
+        },
 
         /**
          * @returns {boolean} - true if logged in
@@ -139,6 +146,9 @@ module.exports = function(url, name, password) {
          * @param user {string} - the user to delete
          */
         deleteUser: function(user, err, callback) {
+            console.log('main deleteUser');
+            console.log(callback);
+
             if (!this.isLoggedIn()) {
                 return this.login(err, function () { self.deleteUser(user, err, callback); });
             }
@@ -155,7 +165,7 @@ module.exports = function(url, name, password) {
         grant: function (user, env, rights, err, callback) {
             if (rights == undefined) {
                 return err('rights are undefined');
-            } else if (rights < Rights.None || rights > Rights.Grant) {
+            } else if (rights < this.Rights.None || rights > this.Rights.Grant) {
                 return err('rights out of range: ' + rights);
             } else if (user == undefined) {
                 return err('user is undefined');

@@ -14,7 +14,7 @@ request.jar = true;
  * @param method - the method to use 'GET', 'POST'
  * @param url - the url to use
  */
-exports.requestObject = function(method, url, data) {
+var requestObject = function(method, url, data) {
     var ret = {
         method: method,
         uri: url
@@ -39,7 +39,7 @@ exports.requestObject = function(method, url, data) {
  * @param success - callback for success
  * @param failure - callback in case of failure
  */
-exports.call = function(req, failure, success) {
+var httpCall = function(req, failure, success) {
     req.json = true;
 
     request(
@@ -60,4 +60,34 @@ exports.call = function(req, failure, success) {
             }
         }
     );
+};
+
+module.exports = function (url) {
+    return {
+        post: function(location, data, failure, success) {
+            var req = requestObject('POST', url + location, data);
+            httpCall(req, failure, success);
+        },
+
+        get: function(location, params, failure, success) {
+            var req = requestObject('GET', url + location);
+            if (params) {
+                req.qs = params;
+            }
+            httpCall(req, failure, success);
+        },
+
+        put: function(location, data, failure, success) {
+            var req = requestObject('PUT', url+location, data);
+            httpCall(req, failure, success);
+        },
+
+        delete: function(location, params, failure, success) {
+            var req = requestObject('DELETE', url+location);
+            if (params) {
+                req.qs = params;
+            }
+            httpCall(req, failure, success);
+        }
+    };
 };

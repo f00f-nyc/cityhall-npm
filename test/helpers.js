@@ -22,5 +22,6 @@ exports.autoLogsIn = function(assert, callback) {
     response.get('auth/user/'+hostname+'/default/', response.value('dev'));
 
     var settings = require('../index.js')(response.url);
-    callback(settings, function () { assert.end(); } );
+    callback(settings, function () {
+    console.log('calling assert.end()'); assert.end(); } );
 };

@@ -10,7 +10,6 @@
 var md5 = require('md5');
 var hostname = require('os').hostname();
 var sanitize = require('./sanitize.js');
-var http = require('./http.js');
 
 var getFirstProperty = function (obj) {
     for (var prop in obj) {
@@ -43,6 +42,8 @@ module.exports = function (url, name, password) {
         throw new Error("Expected a URL to reach City Hall");
     }
 
+    var http = require('./http.js')(url);
+
     if (name == undefined) {
         name = hostname;
     }
@@ -63,31 +64,6 @@ module.exports = function (url, name, password) {
      */
     var default_environment = '';
 
-    /**
-     * Wrapper call for POST'ing to City Hall.
-     *
-     * @param location - the location to POST to (e.x. 'auth/')
-     * @param data - the data to send (e.x. {'value': 'xyz'})
-     */
-    var wrapPost = function(location, data, failure, success) {
-        var req = http.requestObject('POST', url + location, data);
-        http.call(req, failure, success);
-    };
-
-    /**
-     * Wrapper call for GET'ing from City Hall
-     *
-     * @param location - the location to GET
-     * @param params - query params for the call
-     */
-    var wrapGet = function(location, params, failure, success) {
-        var req = http.requestObject('GET', url + location);
-        if (params) {
-            req.qs = params;
-        }
-        http.call(req, failure, success);
-    };
-
     /********************************
      * this section is a set of wrappers for the functions that the user
      * will actually call.  It is done this way so that the actual functions
@@ -96,7 +72,7 @@ module.exports = function (url, name, password) {
 
     var getSingleVal = function (url, error, callback) {
         var fullpath = 'env/'+default_environment+sanitize.path(url);
-        wrapGet(fullpath, null, error, function (data) { callback(data.value); });
+        http.get(fullpath, null, error, function (data) { callback(data.value); });
     };
 
     var getSingleObj = function (obj, error, callback) {
@@ -111,9 +87,9 @@ module.exports = function (url, name, password) {
         var fullpath = 'env/'+env+sanitize.path(obj.path);
 
         if (obj.raw) {
-            wrapGet(fullpath, params, error, callback);
+            http.get(fullpath, params, error, callback);
         } else {
-            wrapGet(fullpath, params, error, function (data) {
+            http.get(fullpath, params, error, function (data) {
                 callback(data.value);
             });
         }
@@ -134,7 +110,7 @@ module.exports = function (url, name, password) {
     };
 
     var setSingleObj = function (uri, value, error, callback) {
-        wrapPost('env/'+uri.environment+sanitize.path(uri.path)+'?override='+uri.override,
+        http.post('env/'+uri.environment+sanitize.path(uri.path)+'?override='+uri.override,
             value, error, callback);
     };
 
@@ -163,24 +139,21 @@ module.exports = function (url, name, password) {
         login: function(err, callback) {
             var payload = {'username': name, 'passhash': this.hash(password)};
 
-            wrapPost('auth/', payload, err, function() {
-                wrapGet('auth/user/' + name + '/default/', null,  err,
+            http.post('auth/', payload, err, function() {
+                http.get('auth/user/' + name + '/default/', null,  err,
                     function (data) {
                         default_environment = data.value || '';
                         user_name = name;
-                        sanitize.call(callback);
+                        sanitize.call(callback, undefined);
                     }
                 );
             });
         },
 
         logout: function(err, callback) {
-            http.call(
-                http.requestObject('DELETE', url + 'auth/'),
-                err,
-                function () {
+            http.delete('auth/',undefined, err, function() {
                     user_name = '';
-                    sanitize.call(callback);
+                    sanitize.call(callback, undefined);
                 }
             );
         },
@@ -190,46 +163,44 @@ module.exports = function (url, name, password) {
         },
 
         setDefaultEnvironment: function(env, error, callback) {
-            wrapPost('auth/user/'+user_name+'/default/', {env: env}, error,
+            http.post('auth/user/'+user_name+'/default/', {env: env}, error,
                 function() {
                     default_environment = env;
-                    sanitize.call(callback);
+                    sanitize.call(callback, undefined);
                 }
             );
         },
 
         viewUsers: function(env, error, callback) {
-            wrapGet('auth/env/' + env +'/', null, error, function(data) {
+            http.get('auth/env/' + env +'/', null, error, function(data) {
                 sanitize.call(callback, data.Users);
             });
         },
 
         createEnvironment: function(env, error, callback) {
-            wrapPost('auth/env/' + env + '/', null, error, callback);
+            http.post('auth/env/' + env + '/', null, error, callback);
         },
 
         getUser: function(user, error, callback) {
-            wrapGet('auth/user/'+user+'/', null, error, function(data) {
+            http.get('auth/user/'+user+'/', null, error, function(data) {
                 sanitize.call(callback, data.Environments);
             });
         },
 
         createUser: function(user, password, error, callback) {
-            wrapPost('auth/user/'+user+'/', {passhash: this.hash(password)}, error, callback);
+            http.post('auth/user/'+user+'/', {passhash: this.hash(password)}, error, callback);
         },
 
         updatePassword:function(password, error, callback) {
-            var req = http.requestObject('PUT', url+'auth/user/'+user_name+'/', {passhash: this.hash(password)});
-            http.call(req, error, callback);
+            http.put('auth/user/'+user_name+'/', {passhash: this.hash(password)}, error, callback);
         },
 
         deleteUser: function(user, error, callback) {
-            var req = http.requestObject('DELETE', url+'auth/user/'+user+'/');
-            http.call(req, error, callback);
+            http.delete('auth/user/'+user+'/', undefined, error, callback);
         },
 
         grant: function(user, env, rights, error, callback) {
-            wrapPost('auth/grant/', {env: env, user: user, rights: rights}, error, callback);
+            http.post('auth/grant/', {env: env, user: user, rights: rights}, error, callback);
         },
 
         getVal: function (val, error, callback) {
@@ -275,14 +246,16 @@ module.exports = function (url, name, password) {
 
         deleteVal: function(uri, error, callback) {
             validateUri(uri, error, function() {
-                var req = http.requestObject('DELETE', url+'env/'+uri.environment+sanitize.path(uri.path)+'?override='+uri.override);
-                http.call(req, error, callback);
+                http.delete(
+                    'env/'+uri.environment+sanitize.path(uri.path),
+                    {override:uri.override}, error, callback
+                );
             });
         },
 
         getHistory: function(uri, error, callback) {
             validateUri(uri, error, function() {
-                wrapGet(
+                http.get(
                     'env/'+uri.environment + sanitize.path(uri.path),
                     {override: uri.override, viewhistory: true},
                     error, function(data) {
@@ -297,7 +270,7 @@ module.exports = function (url, name, password) {
                 return error('Must specify environment and path');
             }
 
-            wrapGet('env/'+env+sanitize.path(path), {viewchildren: true}, error,
+            http.get('env/'+env+sanitize.path(path), {viewchildren: true}, error,
                 function (data) {
                     callback({path: data.path, children: data.children});
                 }
