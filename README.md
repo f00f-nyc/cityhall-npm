@@ -12,8 +12,8 @@ npm install cityhall
 
  The intention is to use the built-in City Hall web site for actual
  settings management, and then use this library for consuming those
- settings, in an application.  As such, there is really only command 
- to be familiar with:
+ settings, in an application.  As such, there is really only one
+ command to be familiar with:
 
  ```javascript
  startUp = function (data) {
