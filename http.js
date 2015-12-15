@@ -39,7 +39,7 @@ var requestObject = function(method, url, data) {
  * @param success - callback for success
  * @param failure - callback in case of failure
  */
-var httpCall = function(req, failure, success) {
+var httpCall = function(req, callback) {
     req.json = true;
 
     request(
@@ -47,16 +47,16 @@ var httpCall = function(req, failure, success) {
         function(error, response, body) {
             if (error || response.statusCode != 200) {
                 if (body) {
-                    sanitize.call(failure, body);
+                    sanitize.call(callback, body);
                 } else {
-                    sanitize.call(failure, error);
+                    sanitize.call(callback, error);
                 }
             }
 
             if (body['Response'] == 'Ok') {
-                sanitize.call(success, body);
+                sanitize.call(callback, undefined, body);
             } else {
-                sanitize.call(failure, body['Message']);
+                sanitize.call(callback, body['Message']);
             }
         }
     );
@@ -64,30 +64,30 @@ var httpCall = function(req, failure, success) {
 
 module.exports = function (url) {
     return {
-        post: function(location, data, failure, success) {
+        post: function(location, data, callback) {
             var req = requestObject('POST', url + location, data);
-            httpCall(req, failure, success);
+            httpCall(req, callback);
         },
 
-        get: function(location, params, failure, success) {
+        get: function(location, params, callback) {
             var req = requestObject('GET', url + location);
             if (params) {
                 req.qs = params;
             }
-            httpCall(req, failure, success);
+            httpCall(req, callback);
         },
 
-        put: function(location, data, failure, success) {
+        put: function(location, data, callback) {
             var req = requestObject('PUT', url+location, data);
-            httpCall(req, failure, success);
+            httpCall(req, callback);
         },
 
-        delete: function(location, params, failure, success) {
+        delete: function(location, params, callback) {
             var req = requestObject('DELETE', url+location);
             if (params) {
                 req.qs = params;
             }
-            httpCall(req, failure, success);
+            httpCall(req, callback);
         }
     };
 };

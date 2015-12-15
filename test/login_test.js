@@ -30,8 +30,8 @@ test('Username and password are passed through', function (assert) {
 
     var settings = require('../index.js')(response.url, username, '');
     settings.login(
-        response.error,
-        function() {
+        function(err, data) {
+            assert.false(err, "No error expected");
             assert.equal('dev', settings.defaultEnvironment());
             assert.end();
         }
@@ -45,9 +45,10 @@ test('Calling login twice is a No-op', function(assert) {
     var settings = require('../index.js')(response.url, username, '');
 
     settings.login(
-        response.error,
-        function() {
-            settings.login(response.error, response.error);
+        function(err, data) {
+            assert.false(err, "No error expected");
+
+            settings.login(response.error);
             assert.true(settings.isLoggedIn(), 'user is logged in');
             assert.equals(username, settings.userName());
             assert.end();
@@ -63,8 +64,8 @@ test('No username will use machine name', function(assert) {
 
     var settings = require('../index.js')(response.url);
     settings.login(
-        response.error,
-        function() {
+        function(err, data) {
+            assert.false(err, "No error expected");
             assert.equal(helpers.hostname, settings.userName());
             assert.end();
         }

@@ -4,9 +4,9 @@
  * @param func - the function to call
  * @param data - the data to pass to the
  */
-exports.call = function(func, data) {
+exports.call = function(func, data1, data2) {
     if ((func != undefined) && (func instanceof Function)) {
-        func(data);
+        func(data1, data2);
     }
 };
 

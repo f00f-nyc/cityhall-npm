@@ -27,12 +27,12 @@ var invalidUri = function(env, path, override) {
         || override == undefined);
 };
 
-var validateUri = function(uri, error, callback) {
+var validateUri = function(uri, callback) {
     if (uri == undefined) {
-        return error('missing fully qualified path');
+        return callback('missing fully qualified path');
     }
     if (invalidUri(uri.environment, uri.path, uri.override)) {
-        return error('must specify environment, path, and override')
+        return callback('must specify environment, path, and override')
     }
     callback();
 };
@@ -70,12 +70,15 @@ module.exports = function (url, name, password) {
      * can easily wrap them with a call to login if we're logged out.
      */
 
-    var getSingleVal = function (url, error, callback) {
+    var getSingleVal = function (url, callback) {
         var fullpath = 'env/'+default_environment+sanitize.path(url);
-        http.get(fullpath, null, error, function (data) { callback(data.value); });
+        http.get(fullpath, null, function (err, data) {
+            if (err) { return callback(err); }
+            callback(null, data.value);
+        });
     };
 
-    var getSingleObj = function (obj, error, callback) {
+    var getSingleObj = function (obj, callback) {
         var env = default_environment;
         var params = null;
         if (obj.environment != undefined) {
@@ -87,41 +90,45 @@ module.exports = function (url, name, password) {
         var fullpath = 'env/'+env+sanitize.path(obj.path);
 
         if (obj.raw) {
-            http.get(fullpath, params, error, callback);
+            http.get(fullpath, params, callback);
         } else {
-            http.get(fullpath, params, error, function (data) {
-                callback(data.value);
+            http.get(fullpath, params, function (err, data) {
+                if (err) { return callback(err); }
+                callback(null, data.value);
             });
         }
     };
 
-    var getNextValue = function (values, response, error, callback) {
+    var getNextValue = function (values, response, callback) {
         var prop = getFirstProperty(values);
 
         if (prop) {
-            getSingleObj(values[prop], error, function (data) {
+            getSingleObj(values[prop], function (err, data) {
+                if (err) { return callback(err); }
+
                 response[prop] = data;
                 delete values[prop];
-                getNextValue(values, response, error, callback);
+                getNextValue(values, response, callback);
             });
         } else {
-            callback(response);
+            callback(null, response);
         }
     };
 
-    var setSingleObj = function (uri, value, error, callback) {
+    var setSingleObj = function (uri, value, callback) {
         http.post('env/'+uri.environment+sanitize.path(uri.path)+'?override='+uri.override,
-            value, error, callback);
+            value, callback);
     };
 
-    var setNextValue = function (values, error, callback) {
+    var setNextValue = function (values, callback) {
         var value = values.pop();
         if (value == undefined) {
             return callback();
         }
         var sanitizedSet = sanitize.setCallBody(value);
-        setSingleObj(value, sanitizedSet, error, function() {
-            setNextValue(values, error, callback);
+        setSingleObj(value, sanitizedSet, function(err, data) {
+            if (err) { return callback(err); }
+            setNextValue(values, callback);
         });
     };
 
@@ -136,24 +143,30 @@ module.exports = function (url, name, password) {
             return user_name;
         },
 
-        login: function(err, callback) {
+        login: function(callback) {
             var payload = {'username': name, 'passhash': this.hash(password)};
 
-            http.post('auth/', payload, err, function() {
-                http.get('auth/user/' + name + '/default/', null,  err,
-                    function (data) {
+            http.post('auth/', payload, function(err, data) {
+                if (err) { return callback(err); }
+
+                http.get('auth/user/' + name + '/default/', null,
+                    function (err, data) {
+                        if (err) { return callback(err); }
+
                         default_environment = data.value || '';
                         user_name = name;
-                        sanitize.call(callback, undefined);
+                        sanitize.call(callback);
                     }
                 );
             });
         },
 
-        logout: function(err, callback) {
-            http.delete('auth/',undefined, err, function() {
+        logout: function(callback) {
+            http.delete('auth/',undefined, function(err, data) {
+                    if (err) { return callback(err); }
+
                     user_name = '';
-                    sanitize.call(callback, undefined);
+                    sanitize.call(callback);
                 }
             );
         },
@@ -162,117 +175,129 @@ module.exports = function (url, name, password) {
             return default_environment;
         },
 
-        setDefaultEnvironment: function(env, error, callback) {
-            http.post('auth/user/'+user_name+'/default/', {env: env}, error,
-                function() {
+        setDefaultEnvironment: function(env, callback) {
+            http.post('auth/user/'+user_name+'/default/', {env: env},
+                function(err, data) {
+                    if (err) { return callback(err); }
+
                     default_environment = env;
-                    sanitize.call(callback, undefined);
+                    sanitize.call(callback);
                 }
             );
         },
 
-        viewUsers: function(env, error, callback) {
-            http.get('auth/env/' + env +'/', null, error, function(data) {
-                sanitize.call(callback, data.Users);
+        viewUsers: function(env, callback) {
+            http.get('auth/env/' + env +'/', null, function(err, data) {
+                if (err) { return callback(err); }
+                sanitize.call(callback, null, data.Users);
             });
         },
 
-        createEnvironment: function(env, error, callback) {
-            http.post('auth/env/' + env + '/', null, error, callback);
+        createEnvironment: function(env, callback) {
+            http.post('auth/env/' + env + '/', null, callback);
         },
 
-        getUser: function(user, error, callback) {
-            http.get('auth/user/'+user+'/', null, error, function(data) {
-                sanitize.call(callback, data.Environments);
+        getUser: function(user, callback) {
+            http.get('auth/user/'+user+'/', null, function(err, data) {
+                if (err) { return callback(err); }
+                sanitize.call(callback, null, data.Environments);
             });
         },
 
-        createUser: function(user, password, error, callback) {
-            http.post('auth/user/'+user+'/', {passhash: this.hash(password)}, error, callback);
+        createUser: function(user, password, callback) {
+            http.post('auth/user/'+user+'/', {passhash: this.hash(password)}, callback);
         },
 
-        updatePassword:function(password, error, callback) {
-            http.put('auth/user/'+user_name+'/', {passhash: this.hash(password)}, error, callback);
+        updatePassword:function(password, callback) {
+            http.put('auth/user/'+user_name+'/', {passhash: this.hash(password)}, callback);
         },
 
-        deleteUser: function(user, error, callback) {
-            http.delete('auth/user/'+user+'/', undefined, error, callback);
+        deleteUser: function(user, callback) {
+            http.delete('auth/user/'+user+'/', undefined, callback);
         },
 
-        grant: function(user, env, rights, error, callback) {
-            http.post('auth/grant/', {env: env, user: user, rights: rights}, error, callback);
+        grant: function(user, env, rights, callback) {
+            http.post('auth/grant/', {env: env, user: user, rights: rights}, callback);
         },
 
-        getVal: function (val, error, callback) {
+        getVal: function (val, callback) {
             if ((val == undefined) || (getFirstProperty(val) == undefined)) {
-                return sanitize.call(error, 'must specify value to get');
+                return sanitize.call(callback, 'must specify value to get');
             } else if (typeof val == 'string' || val instanceof String) {
-                getSingleVal(val, error, callback);
+                getSingleVal(val, callback);
             } else if (val.path == undefined) {
                 for (var item in val) {
                     if (val[item].path == undefined) {
-                        return error('must specify value to get ('+item+')');
+                        return callback('must specify value to get ('+item+')');
                     }
                 }
-                getNextValue(val, {}, error, callback);
+                getNextValue(val, {}, callback);
             } else {
-                getSingleObj(val, error, callback);
+                getSingleObj(val, callback);
             }
         },
 
-        setVal: function (uri, value, error, callback) {
+        setVal: function (uri, value, callback) {
             if (value instanceof Array) {
                 for (var i=0; i<value.length; i++) {
                     var val = value[i];
                     if (invalidUri(val.environment, val.path, val.override)) {
-                        return error('must specify environment, path, and override (' + i + ')');
+                        return callback('must specify environment, path, and override (' + i + ')');
                     }
                     var sanitizedSet = sanitize.setCallBody(val);
                     if (!sanitizedSet) {
-                        return error('must specify value to set (' + i + ')');
+                        return callback('must specify value to set (' + i + ')');
                     }
                 }
-                return setNextValue(value, error, callback);
+                return setNextValue(value, callback);
             }
 
-            validateUri(uri, error, function() {
+            validateUri(uri, function(err, data) {
+                if (err) { return callback(err); }
+
                 var sanitizedSet = sanitize.setCallBody(value);
                 if (!sanitizedSet) {
-                    return error('must specify value to set');
+                    return callback('must specify value to set');
                 }
-                setSingleObj(uri, sanitizedSet, error, callback);
+                setSingleObj(uri, sanitizedSet, callback);
             });
         },
 
-        deleteVal: function(uri, error, callback) {
-            validateUri(uri, error, function() {
+        deleteVal: function(uri, callback) {
+            validateUri(uri, function(err, data) {
+                if (err) { return callback(err); }
+
                 http.delete(
                     'env/'+uri.environment+sanitize.path(uri.path),
-                    {override:uri.override}, error, callback
+                    {override:uri.override}, callback
                 );
             });
         },
 
-        getHistory: function(uri, error, callback) {
-            validateUri(uri, error, function() {
+        getHistory: function(uri, callback) {
+            validateUri(uri, function(err, data) {
+                if (err) { return callback(err); }
+
                 http.get(
                     'env/'+uri.environment + sanitize.path(uri.path),
                     {override: uri.override, viewhistory: true},
-                    error, function(data) {
-                        callback(data.History);
+                    function(err, data) {
+                        if (err) { return callback(err); }
+                        sanitize.call(callback, null, data.History);
                     }
                 );
             });
         },
 
-        getChildren: function(env, path, error, callback) {
+        getChildren: function(env, path, callback) {
             if (invalidUri(env, path, '')) {
-                return error('Must specify environment and path');
+                return callback('Must specify environment and path');
             }
 
-            http.get('env/'+env+sanitize.path(path), {viewchildren: true}, error,
-                function (data) {
-                    callback({path: data.path, children: data.children});
+            http.get('env/'+env+sanitize.path(path), {viewchildren: true},
+                function (err, data) {
+                    if (err) { return callback(err); }
+                    sanitize.call(callback, null, {path: data.path, children: data.children});
                 }
             );
         },

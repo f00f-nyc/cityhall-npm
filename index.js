@@ -10,6 +10,23 @@
 module.exports = function(url, name, password) {
     var self = require('./lib.js')(url, name, password);
 
+    var isLoggedIn = function() {
+        return self.getName() != '';
+    };
+
+    var ensureLoggedIn = function(callback, func) {
+        if (!isLoggedIn()) {
+            return self.login(function (err, data) {
+                if (err) {
+                    return callback(err);
+                }
+                func();
+            });
+        }
+
+        func();
+    };
+
     /********************************
      * The actual object that will be returned to the user.
      */
@@ -28,27 +45,25 @@ module.exports = function(url, name, password) {
         /**
          * @returns {boolean} - true if logged in
          */
-        isLoggedIn: function() {
-            return self.getName() != '';
-        },
+        isLoggedIn: function() { return isLoggedIn();  },
 
         /**
          * This function logs into City Hall.  It is not required to be called,
          * If it isn't called explicitly, it will be called by the first
          * operation to call City Hall. No-op if already logged in.
          */
-        login: function(err, callback) {
+        login: function(callback) {
             if (this.isLoggedIn()) { return; }
-            self.login(err, callback);
+            self.login(callback);
         },
 
         /**
          * This function logs out of City Hall.  In order to use any of the
          * other functions, you must call login() again.
          */
-        logout: function(err, callback) {
+        logout: function(callback) {
             if (this.isLoggedIn()) {
-                self.logout(err, callback);
+                self.logout(callback);
             }
         },
 
@@ -71,22 +86,20 @@ module.exports = function(url, name, password) {
          * @param env {string} - environment to set to default, can be the same as
          *      this.defaultEnvironment()
          */
-        setDefaultEnvironment: function(env, err, callback) {
-            if (!this.isLoggedIn()) {
-                return this.login(err, function() { self.setDefaultEnvironment(env, err, callback) });
-            }
-            self.setDefaultEnvironment(env, err, callback);
+        setDefaultEnvironment: function(env, callback) {
+            ensureLoggedIn(callback, function() {
+                self.setDefaultEnvironment(env, callback);
+            });
         },
 
         /**
          * Views all the users for an environment
          * @param env {string} - the environment to query users for
          */
-        viewUsers: function(env, err, callback) {
-            if (!this.isLoggedIn()) {
-                return this.login(err, function() { self.viewUsers(env, err, callback) });
-            }
-            self.viewUsers(env, err, callback);
+        viewUsers: function(env, callback) {
+            ensureLoggedIn(callback, function() {
+               self.viewUsers(env, callback);
+            });
         },
 
         /**
@@ -94,11 +107,10 @@ module.exports = function(url, name, password) {
          * have Grant permissions to it.
          * @param env {string} - the environment to create, must be unique/unused.
          */
-        createEnvironment: function(env, err, callback) {
-            if (!this.isLoggedIn()) {
-                return this.login(err, function() { self.createEnvironment(env, err, callback); });
-            }
-            self.createEnvironment(env, err, callback);
+        createEnvironment: function(env, callback) {
+            ensureLoggedIn(callback, function() {
+                self.createEnvironment(env, callback);
+            });
         },
 
         /**
@@ -106,11 +118,10 @@ module.exports = function(url, name, password) {
          * access to, and the level of permissions for each
          * @param user {string} - the user to query, it must exist.
          */
-        getUser: function(user, err, callback) {
-            if (!this.isLoggedIn()) {
-                return this.login(err, function() { self.getUser(user, err, callback); });
-            }
-            self.getUser(user, err, callback);
+        getUser: function(user, callback) {
+            ensureLoggedIn(callback, function() {
+                self.getUser(user, callback);
+            });
         },
 
         /**
@@ -119,11 +130,10 @@ module.exports = function(url, name, password) {
          * @param password {string} - the plaintext password, it will be hashed
          *   before being sent across the wire.
          */
-        createUser: function(user, password, err, callback) {
-            if (!this.isLoggedIn()) {
-                return this.login(err, function() { self.createUser(user, password, err, callback); });
-            }
-            self.createUser(user, password, err, callback);
+        createUser: function(user, password, callback) {
+            ensureLoggedIn(callback, function() {
+                self.createUser(user, password, callback);
+            });
         },
 
         /**
@@ -131,11 +141,10 @@ module.exports = function(url, name, password) {
          * @param password {string} - the plaintext password, it will be hashed
          *   before being sent across the wire.
          */
-        updatePassword: function(password, err, callback) {
-            if (!this.isLoggedIn()) {
-                return this.login(err, function() { self.updatePassword(password, err, callback); });
-            }
-            self.updatePassword(password, err, callback);
+        updatePassword: function(password, callback) {
+            ensureLoggedIn(callback, function() {
+                self.updatePassword(password, callback);
+            });
         },
 
         /**
@@ -145,14 +154,10 @@ module.exports = function(url, name, password) {
          * callback err
          * @param user {string} - the user to delete
          */
-        deleteUser: function(user, err, callback) {
-            console.log('main deleteUser');
-            console.log(callback);
-
-            if (!this.isLoggedIn()) {
-                return this.login(err, function () { self.deleteUser(user, err, callback); });
-            }
-            self.deleteUser(user, err, callback);
+        deleteUser: function(user, callback) {
+            ensureLoggedIn(callback, function() {
+                self.deleteUser(user, callback);
+            });
         },
 
         /**
@@ -162,19 +167,19 @@ module.exports = function(url, name, password) {
          * @param env {string} -
          * @param rights {string} -
          */
-        grant: function (user, env, rights, err, callback) {
+        grant: function (user, env, rights, callback) {
             if (rights == undefined) {
-                return err('rights are undefined');
+                return callback('rights are undefined');
             } else if (rights < this.Rights.None || rights > this.Rights.Grant) {
-                return err('rights out of range: ' + rights);
+                return callback('rights out of range: ' + rights);
             } else if (user == undefined) {
-                return err('user is undefined');
+                return callback('user is undefined');
             } else if (env == undefined) {
-                return err('environment is undefined');
-            } else if (!this.isLoggedIn()) {
-                return this.login(err, function () { self.grant(user, env, rights, err, callback); });
+                return callback('environment is undefined');
             }
-            self.grant(user, env, rights, err, callback);
+            ensureLoggedIn(callback, function() {
+                self.grant(user, env, rights, callback);
+            });
         },
 
         /**
@@ -190,11 +195,10 @@ module.exports = function(url, name, password) {
          *    cannot be named url.  Each property must have a url property and
          *    may contain optional raw, override, and/or environment properties.
          */
-        getVal: function(val, err, callback) {
-            if (!this.isLoggedIn()) {
-                return this.login(err, function () { self.getVal(val, err, callback); });
-            }
-            self.getVal(val, err, callback);
+        getVal: function(val, callback) {
+            ensureLoggedIn(callback, function() {
+                self.getVal(val, callback);
+            })
         },
 
         /**
@@ -215,11 +219,10 @@ module.exports = function(url, name, password) {
          *  environment, path, and override property.  If this value is an Array,
          *  the uri value will be ignored   .
          */
-        setVal: function(uri, value, err, callback) {
-            if (!this.isLoggedIn()) {
-                return this.login(err, function () { self.setVal(uri, value, err, callback); });
-            }
-            self.setVal(uri, value, err, callback);
+        setVal: function(uri, value, callback) {
+            ensureLoggedIn(callback, function() {
+                self.setVal(uri, value, callback);
+            });
         },
 
         /**
@@ -231,11 +234,10 @@ module.exports = function(url, name, password) {
          *      override {string} - the override to set. Must be specified,
          *          even if it is the default ('') one.
          */
-        deleteVal: function(uri, err, callback) {
-            if (!this.isLoggedIn()) {
-                return this.login(err, function () { self.deleteVal(uri, err, callback); });
-            }
-            self.deleteVal(uri, err, callback);
+        deleteVal: function(uri, callback) {
+            ensureLoggedIn(callback, function() {
+                self.deleteVal(uri, callback);
+            });
         },
 
         /**
@@ -247,11 +249,10 @@ module.exports = function(url, name, password) {
          *      override {string} - the override to set. Must be specified,
          *          even if it is the default ('') one.
          */
-        getHistory: function(uri, err, callback) {
-            if (!this.isLoggedIn()) {
-                return this.login(err, function() { self.getHistory(uri, err, callback); });
-            }
-            self.getHistory(uri, err, callback);
+        getHistory: function(uri, callback) {
+            ensureLoggedIn(callback, function() {
+                self.getHistory(uri, callback);
+            });
         },
 
         /**
@@ -262,11 +263,10 @@ module.exports = function(url, name, password) {
          * @param env {string} - the environment to query
          * @param path {string} - the path on that environment
          */
-        getChildren: function(env, path, err, callback) {
-            if (!this.isLoggedIn()) {
-                return this.login(err, function() { self.getChildren(env, path, err, callback); });
-            }
-            self.getChildren(env, path, err, callback);
+        getChildren: function(env, path, callback) {
+            ensureLoggedIn(callback, function() {
+                self.getChildren(env, path, callback);
+            });
         }
     };
 };
