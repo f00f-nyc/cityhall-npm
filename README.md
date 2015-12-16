@@ -16,12 +16,12 @@ npm install cityhall
  command to be familiar with:
 
  ```javascript
- startUp = function (data) {
+ startUp = function (err, data) {
     console.log(data.value);
  };
 
  var settings = require('cityhall')('http://path.to.server/api');
- settings.getVal('/test/val1', null, startUp);
+ settings.getVal('/test/val1', startUp);
 ```
 
 You can also get multiple values, and in multiple ways, at once using:
@@ -32,6 +32,6 @@ settings.getVal(
         value2: {path: '/test/val2', environment: 'dev'},
         value3: {path: '/test/val3', override: 'cityhall'}
     },
-    null, startUp);
+    startUp);
 ```
 
