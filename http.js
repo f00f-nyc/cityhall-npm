@@ -1,12 +1,11 @@
 var sanitize = require('./sanitize.js');
-request = require('request');
+var request = require('request');
 
 /**
  * City Hall works on a session basis, so by default, our interaction
  * with it must have a cookie jar.
  */
-request.jar = true;
-
+request = request.defaults({jar: true});
 
 /**
  * Returns a req object to be passed to request()
@@ -17,14 +16,14 @@ request.jar = true;
 var requestObject = function(method, url, data) {
     var ret = {
         method: method,
-        uri: url
+        uri: url,
+        headers: {
+            "Content-Type": "application/json"
+        }
     };
 
     if (data != undefined) {
-        ret.multipart = [{
-            'content-type': 'application/json',
-            body: JSON.stringify(data)
-        }]
+        ret.body = JSON.stringify(data);
     }
 
     return ret;

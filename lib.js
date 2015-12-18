@@ -147,11 +147,15 @@ module.exports = function (url, name, password) {
             var payload = {'username': name, 'passhash': this.hash(password)};
 
             http.post('auth/', payload, function(err, data) {
-                if (err) { return callback(err); }
+                if (err) {
+                    return sanitize.call(callback, err);
+                }
 
                 http.get('auth/user/' + name + '/default/', null,
                     function (err, data) {
-                        if (err) { return callback(err); }
+                        if (err) {
+                            return sanitize.call(callback, err);
+                        }
 
                         default_environment = data.value || '';
                         user_name = name;
@@ -194,7 +198,7 @@ module.exports = function (url, name, password) {
         },
 
         createEnvironment: function(env, callback) {
-            http.post('auth/env/' + env + '/', null, callback);
+            http.post('auth/env/' + env + '/', {}, callback);
         },
 
         getUser: function(user, callback) {

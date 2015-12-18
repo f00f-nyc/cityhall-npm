@@ -70,17 +70,9 @@ exports.value = function (val, protect) {
     return ret;
 };
 
-
-//body is some kind of structured string, haven't figured out
-//the accepted way to parse it. Break it up to get to the JSON
 var checkNockBody = function(body, expected) {
-    body = body.toString();
-    var start = body.indexOf("{");
-    var end = body.indexOf("}--") + 1;
-    var json = body.substring(start, end);
     var expectedJson = JSON.stringify(expected);
-
-    return json == expectedJson;
+    return body == expectedJson;
 };
 
 exports.post = function (address, reply, expected) {

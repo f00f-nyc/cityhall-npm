@@ -16,15 +16,15 @@ module.exports = function(url, name, password) {
 
     var ensureLoggedIn = function(callback, func) {
         if (!isLoggedIn()) {
-            return self.login(function (err, data) {
+            self.login(function (err, data) {
                 if (err) {
                     return callback(err);
                 }
                 func();
             });
+        } else {
+            func();
         }
-
-        func();
     };
 
     /********************************
