@@ -7,23 +7,35 @@
  * @param name - the name to use.  If undefined, will use machine name
  * @param password - the plaintext password.  If undefined, it will use ''
  */
+var sanitize = require('./sanitize.js');
+
 module.exports = function(url, name, password) {
     var self = require('./lib.js')(url, name, password);
-
-    var isLoggedIn = function() {
-        return self.getName() != '';
+    var state = {
+        NotLoggedIn: 0,
+        LoggingIn: 1,
+        LoggedIn: 2,
+        LoggingOut: 3
     };
+    var currentState = state.NotLoggedIn;
 
     var ensureLoggedIn = function(callback, func) {
-        if (!isLoggedIn()) {
+        if (currentState == state.NotLoggedIn) {
+            currentState = state.LoggingIn;
             self.login(function (err, data) {
                 if (err) {
-                    return callback(err);
+                    currentState = state.NotLoggedIn;
+                    callback(err);
+                } else {
+                    currentState = state.LoggedIn;
+                    func();
                 }
-                func();
             });
-        } else {
+        } else if (currentState == state.LoggedIn) {
             func();
+        } else {
+            //We have to wait for the logging in/out to finish
+            setImmediate(ensureLoggedIn, callback, func);
         }
     };
 
@@ -45,7 +57,7 @@ module.exports = function(url, name, password) {
         /**
          * @returns {boolean} - true if logged in
          */
-        isLoggedIn: function() { return isLoggedIn();  },
+        isLoggedIn: function() { return currentState == state.LoggedIn;  },
 
         /**
          * This function logs into City Hall.  It is not required to be called,
@@ -53,8 +65,18 @@ module.exports = function(url, name, password) {
          * operation to call City Hall. No-op if already logged in.
          */
         login: function(callback) {
-            if (this.isLoggedIn()) { return; }
-            self.login(callback);
+            if (currentState == state.NotLoggedIn) {
+                currentState = state.LoggingIn;
+                self.login(function(err, data) {
+                    if (err) {
+                        currentState = state.NotLoggedIn;
+                        sanitize.call(callback, err);
+                    } else {
+                        currentState = state.LoggedIn;
+                        sanitize.call(callback);
+                    }
+                });
+            }
         },
 
         /**
@@ -62,8 +84,17 @@ module.exports = function(url, name, password) {
          * other functions, you must call login() again.
          */
         logout: function(callback) {
-            if (this.isLoggedIn()) {
-                self.logout(callback);
+            if (currentState == state.LoggedIn) {
+                currentState = state.LoggingOut;
+                self.logout(function(err, data) {
+                    if (err) {
+                        currentState = state.LoggedIn;
+                        sanitize.call(callback, err);
+                    } else {
+                        currentState = state.NotLoggedIn;
+                        sanitize.call(callback);
+                    }
+                });
             }
         },
 
@@ -192,7 +223,7 @@ module.exports = function(url, name, password) {
          *    is the only way to retrieve the protect bit, as it returns the
          *    entire response from the server.
          *  {collection} - an object which can have 1 or more properties, which
-         *    cannot be named url.  Each property must have a url property and
+         *    cannot be named path.  Each property must have a path property and
          *    may contain optional raw, override, and/or environment properties.
          */
         getVal: function(val, callback) {
@@ -217,7 +248,7 @@ module.exports = function(url, name, password) {
          *  If it is an Array, it must be an array of the aforementioned objects,
          *  containing either a value or protect property or both, as well as an
          *  environment, path, and override property.  If this value is an Array,
-         *  the uri value will be ignored   .
+         *  the uri value will be ignored.
          */
         setVal: function(uri, value, callback) {
             ensureLoggedIn(callback, function() {

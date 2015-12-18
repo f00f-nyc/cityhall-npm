@@ -24,15 +24,20 @@ var getFirstProperty = function (obj) {
 var invalidUri = function(env, path, override) {
     return (env == undefined || env == ''
         || path == undefined || path == ''
-        || override == undefined);
+        || override == undefined
+        || ('string' != typeof env)
+        || ('string' != typeof path)
+        || ('string' != typeof override));
 };
 
 var validateUri = function(uri, callback) {
     if (uri == undefined) {
-        return callback('missing fully qualified path');
+        sanitize.call(callback, 'missing fully qualified path');
+        return;
     }
     if (invalidUri(uri.environment, uri.path, uri.override)) {
-        return callback('must specify environment, path, and override')
+        sanitize.call(callback, 'must specify environment, path, and override');
+        return;
     }
     callback();
 };
@@ -73,8 +78,11 @@ module.exports = function (url, name, password) {
     var getSingleVal = function (url, callback) {
         var fullpath = 'env/'+default_environment+sanitize.path(url);
         http.get(fullpath, null, function (err, data) {
-            if (err) { return callback(err); }
-            callback(null, data.value);
+            if (err) {
+                sanitize.call(callback, err);
+                return;
+            }
+            sanitize.call(callback, null, data.value);
         });
     };
 
@@ -93,8 +101,11 @@ module.exports = function (url, name, password) {
             http.get(fullpath, params, callback);
         } else {
             http.get(fullpath, params, function (err, data) {
-                if (err) { return callback(err); }
-                callback(null, data.value);
+                if (err) {
+                    sanitize.call(callback, err);
+                    return;
+                }
+                sanitize.call(callback, null, data.value);
             });
         }
     };
@@ -104,14 +115,17 @@ module.exports = function (url, name, password) {
 
         if (prop) {
             getSingleObj(values[prop], function (err, data) {
-                if (err) { return callback(err); }
+                if (err) {
+                    sanitize.call(callback, err);
+                    return;
+                }
 
                 response[prop] = data;
                 delete values[prop];
                 getNextValue(values, response, callback);
             });
         } else {
-            callback(null, response);
+            sanitize.call(callback, null, response);
         }
     };
 
@@ -123,11 +137,15 @@ module.exports = function (url, name, password) {
     var setNextValue = function (values, callback) {
         var value = values.pop();
         if (value == undefined) {
-            return callback();
+            sanitize.call(callback);
+            return;
         }
         var sanitizedSet = sanitize.setCallBody(value);
         setSingleObj(value, sanitizedSet, function(err, data) {
-            if (err) { return callback(err); }
+            if (err) {
+                sanitize.call(callback, err);
+                return;
+            }
             setNextValue(values, callback);
         });
     };
@@ -148,13 +166,15 @@ module.exports = function (url, name, password) {
 
             http.post('auth/', payload, function(err, data) {
                 if (err) {
-                    return sanitize.call(callback, err);
+                    sanitize.call(callback, err);
+                    return;
                 }
 
                 http.get('auth/user/' + name + '/default/', null,
                     function (err, data) {
                         if (err) {
-                            return sanitize.call(callback, err);
+                            sanitize.call(callback, err);
+                            return;
                         }
 
                         default_environment = data.value || '';
@@ -167,7 +187,10 @@ module.exports = function (url, name, password) {
 
         logout: function(callback) {
             http.delete('auth/',undefined, function(err, data) {
-                    if (err) { return callback(err); }
+                    if (err) {
+                        sanitize.call(callback, err);
+                        return;
+                    }
 
                     user_name = '';
                     sanitize.call(callback);
@@ -182,7 +205,10 @@ module.exports = function (url, name, password) {
         setDefaultEnvironment: function(env, callback) {
             http.post('auth/user/'+user_name+'/default/', {env: env},
                 function(err, data) {
-                    if (err) { return callback(err); }
+                    if (err) {
+                        sanitize.call(callback, err);
+                        return;
+                    }
 
                     default_environment = env;
                     sanitize.call(callback);
@@ -192,7 +218,10 @@ module.exports = function (url, name, password) {
 
         viewUsers: function(env, callback) {
             http.get('auth/env/' + env +'/', null, function(err, data) {
-                if (err) { return callback(err); }
+                if (err) {
+                    sanitize.call(callback, err);
+                    return;
+                }
                 sanitize.call(callback, null, data.Users);
             });
         },
@@ -203,7 +232,10 @@ module.exports = function (url, name, password) {
 
         getUser: function(user, callback) {
             http.get('auth/user/'+user+'/', null, function(err, data) {
-                if (err) { return callback(err); }
+                if (err) {
+                    sanitize.call(callback, err);
+                    return;
+                }
                 sanitize.call(callback, null, data.Environments);
             });
         },
@@ -226,13 +258,15 @@ module.exports = function (url, name, password) {
 
         getVal: function (val, callback) {
             if ((val == undefined) || (getFirstProperty(val) == undefined)) {
-                return sanitize.call(callback, 'must specify value to get');
+                sanitize.call(callback, 'must specify value to get');
+                return;
             } else if (typeof val == 'string' || val instanceof String) {
                 getSingleVal(val, callback);
             } else if (val.path == undefined) {
                 for (var item in val) {
                     if (val[item].path == undefined) {
-                        return callback('must specify value to get ('+item+')');
+                        sanitize.call(callback, 'must specify value to get ('+item+')');
+                        return;
                     }
                 }
                 getNextValue(val, {}, callback);
@@ -246,22 +280,28 @@ module.exports = function (url, name, password) {
                 for (var i=0; i<value.length; i++) {
                     var val = value[i];
                     if (invalidUri(val.environment, val.path, val.override)) {
-                        return callback('must specify environment, path, and override (' + i + ')');
+                        sanitize.call(callback, 'must specify environment, path, and override (' + i + ')');
+                        return;
                     }
                     var sanitizedSet = sanitize.setCallBody(val);
                     if (!sanitizedSet) {
-                        return callback('must specify value to set (' + i + ')');
+                        sanitize.call(callback, 'must specify value to set (' + i + ')');
+                        return;
                     }
                 }
                 return setNextValue(value, callback);
             }
 
             validateUri(uri, function(err, data) {
-                if (err) { return callback(err); }
+                if (err) {
+                    sanitize.call(callback, err);
+                    return;
+                }
 
                 var sanitizedSet = sanitize.setCallBody(value);
                 if (!sanitizedSet) {
-                    return callback('must specify value to set');
+                    sanitize.call(callback, 'must specify value to set');
+                    return;
                 }
                 setSingleObj(uri, sanitizedSet, callback);
             });
@@ -269,7 +309,10 @@ module.exports = function (url, name, password) {
 
         deleteVal: function(uri, callback) {
             validateUri(uri, function(err, data) {
-                if (err) { return callback(err); }
+                if (err) {
+                    sanitize.call(callback, err);
+                    return;
+                }
 
                 http.delete(
                     'env/'+uri.environment+sanitize.path(uri.path),
@@ -280,13 +323,19 @@ module.exports = function (url, name, password) {
 
         getHistory: function(uri, callback) {
             validateUri(uri, function(err, data) {
-                if (err) { return callback(err); }
+                if (err) {
+                    sanitize.call(callback, err);
+                    return;
+                }
 
                 http.get(
                     'env/'+uri.environment + sanitize.path(uri.path),
                     {override: uri.override, viewhistory: true},
                     function(err, data) {
-                        if (err) { return callback(err); }
+                        if (err) {
+                            sanitize.call(callback, err);
+                            return;
+                        }
                         sanitize.call(callback, null, data.History);
                     }
                 );
@@ -295,13 +344,17 @@ module.exports = function (url, name, password) {
 
         getChildren: function(env, path, callback) {
             if (invalidUri(env, path, '')) {
-                return callback('Must specify environment and path');
+                sanitize.call(callback, 'Must specify environment and path');
+                return;
             }
 
             http.get('env/'+env+sanitize.path(path), {viewchildren: true},
                 function (err, data) {
-                    if (err) { return callback(err); }
-                    sanitize.call(callback, null, {path: data.path, children: data.children});
+                    if (err) {
+                        sanitize.call(callback, err);
+                    } else {
+                        sanitize.call(callback, null, {path: data.path, children: data.children});
+                    }
                 }
             );
         },
